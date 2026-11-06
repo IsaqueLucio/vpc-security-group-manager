@@ -419,8 +419,8 @@ Enviar `null` remove a zona. Status, CIDR e VPC não são alteráveis por PATCH.
 
 ### `DELETE /subnets/{subnet_id}`
 
-Marca a Subnet e suas IPAllocations ativas como `DELETED` na mesma transação.
-Retorna a Subnet excluída.
+Marca a Subnet e suas IPAllocations e NAT Gateways ativos como `DELETED` na
+mesma transação. Retorna a Subnet excluída.
 
 ## Endpoints de IPAllocation
 
@@ -481,6 +481,57 @@ a outro owner retorna `404`.
 
 Marca a alocação como `DELETED` e retorna a representação atualizada. O
 endereço fica disponível para reutilização dentro da mesma Subnet.
+
+## Endpoints de Gateways
+
+Os gateways nesta fase são apenas cadastros e validações. Não há simulação de
+roteamento ou tráfego de pacotes. Ambos são criados com status `ACTIVE` e
+removidos logicamente com status `DELETED`.
+
+### `POST /vpcs/{vpc_id}/internet-gateways`
+
+Cria um Internet Gateway na VPC acessível. Não recebe corpo. É permitido no
+máximo um gateway com status diferente de `DELETED` por VPC. Um segundo ativo
+retorna `409`; a regra é garantida também por índice único parcial do
+PostgreSQL.
+
+### `GET /vpcs/{vpc_id}/internet-gateways`
+
+Lista Internet Gateways ativos da VPC acessível.
+
+### `DELETE /internet-gateways/{gateway_id}`
+
+Marca o Internet Gateway como `DELETED`. A resposta contém o gateway alterado;
+depois disso, outro gateway pode ser criado para a VPC.
+
+### `POST /subnets/{subnet_id}/nat-gateways`
+
+Cria NAT Gateway na Subnet acessível. Não recebe corpo. A Subnet deve ter
+`type: "PUBLIC"`; para `PRIVATE`, a resposta é `422`.
+
+### `GET /subnets/{subnet_id}/nat-gateways`
+
+Lista NAT Gateways ativos da Subnet acessível.
+
+### `DELETE /nat-gateways/{gateway_id}`
+
+Marca o NAT Gateway como `DELETED` e devolve o recurso atualizado.
+
+Todas essas rotas exigem JWT e respeitam ownership. Recursos de outro dono
+retornam `404` para usuários comuns; admins podem acessá-los. A exclusão da
+Subnet ou da VPC também marca gateways descendentes como `DELETED` na mesma
+transação.
+
+Exemplo:
+
+```bash
+curl -X POST "http://localhost:8000/vpcs/<vpc-id>/internet-gateways" \
+  -H "Authorization: Bearer $TOKEN"
+curl -X POST "http://localhost:8000/subnets/<public-subnet-id>/nat-gateways" \
+  -H "Authorization: Bearer $TOKEN"
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8000/subnets/<public-subnet-id>/nat-gateways"
+```
 
 ## Exemplo completo com dois usuários
 

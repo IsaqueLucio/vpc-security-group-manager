@@ -9,6 +9,8 @@ from app.modules.ip_allocations.models import IPAllocation as _IPAllocation
 from app.modules.subnets.models import Subnet as _Subnet
 from app.modules.vpcs.models import VPC as _VPC
 from app.modules.users.models import User as _User
+from app.modules.internet_gateways.models import InternetGateway as _InternetGateway
+from app.modules.nat_gateways.models import NatGateway as _NatGateway
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))

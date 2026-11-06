@@ -35,10 +35,13 @@ def app_exception_for_database_error(exc: DBAPIError) -> AppException | None:
             "uq_vpcs_owner_name_active",
             "uq_subnets_vpc_name_active",
             "uq_ip_allocations_subnet_ip_active",
+            "uq_internet_gateways_vpc_active",
         }:
             detail = (
                 "O IP já está alocado nesta subnet."
                 if constraint == "uq_ip_allocations_subnet_ip_active"
+                else "A VPC já possui um Internet Gateway ativo."
+                if constraint == "uq_internet_gateways_vpc_active"
                 else "Já existe um recurso ativo com esse nome."
             )
             return AppException(

@@ -142,7 +142,8 @@ VPC ownership is resolved from the JWT user. Admins can access resources for
 any owner; regular users only see their own VPCs. PATCH accepts only `name`
 and `description`; status changes are internal. DELETE soft-deletes the VPC;
 active subnets and their active IP allocations are soft-deleted in the same
-transaction.
+transaction. Internet Gateways and NAT Gateways below those resources are also
+soft-deleted synchronously.
 
 The background activation task waits `VPC_PROVISIONING_DELAY_SECONDS`
 (default `30`) and then changes a still-pending VPC to `ACTIVE`. This
@@ -200,6 +201,40 @@ be reused. Creation locks the subnet row and uses the same configurable lock
 timeout as subnet creation; a timeout returns `503` with `Retry-After`, and an
 active duplicate address returns `409`. Deleting a subnet or VPC soft-deletes
 its active allocations synchronously in the same transaction.
+
+## Gateway APIs
+
+These endpoints manage gateway records only; they do not simulate packet
+forwarding. A VPC can have at most one non-deleted Internet Gateway. The
+partial unique index in PostgreSQL enforces this rule even for concurrent
+requests. NAT Gateways can only be created for `PUBLIC` subnets. Gateways start
+as `ACTIVE`; DELETE changes their status to `DELETED`, allowing an Internet
+Gateway replacement on that VPC.
+
+```bash
+# Create/list an Internet Gateway for a VPC.
+curl -X POST "http://127.0.0.1:8000/vpcs/<vpc-id>/internet-gateways" \
+  -H "Authorization: Bearer $TOKEN"
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://127.0.0.1:8000/vpcs/<vpc-id>/internet-gateways"
+
+# Create/list a NAT Gateway for a PUBLIC subnet.
+curl -X POST "http://127.0.0.1:8000/subnets/<public-subnet-id>/nat-gateways" \
+  -H "Authorization: Bearer $TOKEN"
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://127.0.0.1:8000/subnets/<public-subnet-id>/nat-gateways"
+
+# Soft-delete either resource by its returned UUID.
+curl -X DELETE "http://127.0.0.1:8000/internet-gateways/<gateway-id>" \
+  -H "Authorization: Bearer $TOKEN"
+curl -X DELETE "http://127.0.0.1:8000/nat-gateways/<gateway-id>" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Non-owners receive `404`; admins may operate on any owner's resources.
+Creating another active Internet Gateway returns `409`. Attempting to create a
+NAT Gateway for a `PRIVATE` subnet returns `422`. Deleting a VPC or subnet
+soft-deletes its dependent gateway records in the same transaction.
 
 For a manual check, create a subnet and replace `<subnet-id>` with its UUID.
 Omit `ip_address` for automatic first-fit, or provide an available address:
@@ -314,12 +349,12 @@ migrations in CI before the unit tests.
 ## Roadmap
 
 Phase 01 is being implemented in increments. VPC, subnet and IP allocation
-management and subnet availability-zone validation are complete; gateways,
-route tables and VPC peering remain in progress:
+management, subnet availability-zone validation, and gateway records are
+complete; route tables and VPC peering remain in progress:
 
 1. [x] VPC and IP address management.
 2. [x] Subnets and network segmentation, including region-aware availability zones.
-3. [ ] Internet and NAT gateways.
+3. [x] Internet and NAT gateways (records and validation; no traffic simulation).
 4. [ ] Route tables and routing.
 5. [ ] VPC peering.
 6. [ ] Security groups and firewall rules.

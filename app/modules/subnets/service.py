@@ -26,6 +26,7 @@ from app.domain.regions import (
     validate_availability_zone,
 )
 from app.modules.ip_allocations.models import IPAllocation
+from app.modules.nat_gateways.models import NatGateway
 from app.modules.subnets.models import Subnet
 from app.modules.subnets.repository import SubnetRepository
 from app.modules.subnets.schemas import SubnetCreate, SubnetUpdate
@@ -221,6 +222,14 @@ class SubnetService:
                 .where(
                     IPAllocation.subnet_id == subnet_id,
                     IPAllocation.status != ResourceStatus.DELETED,
+                )
+                .values(status=ResourceStatus.DELETED)
+            )
+            self.db.execute(
+                update(NatGateway)
+                .where(
+                    NatGateway.subnet_id == subnet_id,
+                    NatGateway.status != ResourceStatus.DELETED,
                 )
                 .values(status=ResourceStatus.DELETED)
             )

@@ -24,6 +24,8 @@ from app.domain.networking import (
 )
 from app.modules.subnets.models import Subnet
 from app.modules.ip_allocations.models import IPAllocation
+from app.modules.internet_gateways.models import InternetGateway
+from app.modules.nat_gateways.models import NatGateway
 from app.modules.vpcs.models import VPC
 from app.modules.vpcs.repository import VPCRepository
 from app.modules.vpcs.schemas import VPCCreate, VPCUpdate
@@ -148,6 +150,24 @@ class VPCService:
                         select(Subnet.id).where(Subnet.vpc_id == vpc_id)
                     ),
                     IPAllocation.status != ResourceStatus.DELETED,
+                )
+                .values(status=ResourceStatus.DELETED)
+            )
+            self.db.execute(
+                update(InternetGateway)
+                .where(
+                    InternetGateway.vpc_id == vpc_id,
+                    InternetGateway.status != ResourceStatus.DELETED,
+                )
+                .values(status=ResourceStatus.DELETED)
+            )
+            self.db.execute(
+                update(NatGateway)
+                .where(
+                    NatGateway.subnet_id.in_(
+                        select(Subnet.id).where(Subnet.vpc_id == vpc_id)
+                    ),
+                    NatGateway.status != ResourceStatus.DELETED,
                 )
                 .values(status=ResourceStatus.DELETED)
             )
