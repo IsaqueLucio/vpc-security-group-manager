@@ -11,6 +11,11 @@ from app.modules.vpcs.models import VPC as _VPC
 from app.modules.users.models import User as _User
 from app.modules.internet_gateways.models import InternetGateway as _InternetGateway
 from app.modules.nat_gateways.models import NatGateway as _NatGateway
+from app.modules.route_tables.models import RouteTable as _RouteTable
+from app.modules.routes.models import Route as _Route
+from app.modules.route_table_associations.models import (
+    RouteTableAssociation as _RouteTableAssociation,
+)
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))

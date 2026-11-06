@@ -533,6 +533,98 @@ curl -H "Authorization: Bearer $TOKEN" \
   "http://localhost:8000/subnets/<public-subnet-id>/nat-gateways"
 ```
 
+## Endpoints de Route Tables
+
+Route Tables são cadastradas por VPC. Rotas configuram destinos, mas não
+simulam encaminhamento de pacotes. Os targets aceitos são `LOCAL`,
+`INTERNET_GATEWAY` e `NAT_GATEWAY`. IGW e NAT Gateway devem estar ativos e
+pertencer à mesma VPC da Route Table. `LOCAL` exige `target_id: null` ou campo
+omitido; os outros targets exigem um UUID válido. CIDR inválido/não canônico,
+target ausente/inativo/de outra VPC retorna `422`.
+
+### `POST /vpcs/{vpc_id}/route-tables`
+
+Cria uma Route Table na VPC acessível:
+
+```json
+{"name": "main"}
+```
+
+### `GET /vpcs/{vpc_id}/route-tables`
+
+Lista as Route Tables ativas da VPC.
+
+### `GET /route-tables/{route_table_id}`
+
+Retorna uma Route Table acessível.
+
+### `DELETE /route-tables/{route_table_id}`
+
+Marca a Route Table, suas rotas ativas e associações ativas como `DELETED` na
+mesma transação.
+
+### `POST /route-tables/{route_table_id}/routes`
+
+Cria uma rota. Exemplos:
+
+```json
+{
+  "destination_cidr": "0.0.0.0/0",
+  "target_type": "INTERNET_GATEWAY",
+  "target_id": "<internet-gateway-id>"
+}
+```
+
+```json
+{"destination_cidr": "10.20.0.0/16", "target_type": "LOCAL"}
+```
+
+### `GET /route-tables/{route_table_id}/routes`
+
+Lista as rotas ativas da Route Table.
+
+### `DELETE /routes/{route_id}`
+
+Marca a rota como `DELETED`.
+
+### `POST /subnets/{subnet_id}/route-table-association`
+
+Associa uma Subnet a uma Route Table:
+
+```json
+{"route_table_id": "<route-table-id>"}
+```
+
+Subnet e Route Table precisam pertencer à mesma VPC. Uma Subnet pode ter no
+máximo uma associação ativa; tentar criar outra retorna `409` sem substituir
+a associação existente. Após excluir a associação, outra pode ser criada.
+
+### `DELETE /subnets/{subnet_id}/route-table-association`
+
+Marca a associação ativa da Subnet como `DELETED`.
+
+Todas as rotas exigem JWT e ownership é conferido pela VPC ancestral. Usuários
+sem acesso recebem `404`; admins podem operar recursos de outros donos.
+Excluir uma Subnet ou VPC também marca suas associações e rotas descendentes
+como `DELETED` na mesma transação.
+
+Exemplo de fluxo manual:
+
+```bash
+TABLE_ID=$(curl -sS -X POST "http://localhost:8000/vpcs/<vpc-id>/route-tables" \
+  -H "Authorization: Bearer <token>" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"main"}' | jq -r .id)
+curl -X POST "http://localhost:8000/route-tables/$TABLE_ID/routes" \
+  -H "Authorization: Bearer <token>" \
+  -H 'Content-Type: application/json' \
+  -d '{"destination_cidr":"10.20.0.0/16","target_type":"LOCAL"}'
+curl -X POST "http://localhost:8000/subnets/<subnet-id>/route-table-association" \
+  -H "Authorization: Bearer <token>" \
+  -H 'Content-Type: application/json' \
+  -d "{\"route_table_id\":\"$TABLE_ID\"}"
+```
+
 ## Exemplo completo com dois usuários
 
 O exemplo pressupõe que `ADMIN_TOKEN` tenha sido obtido como mostrado acima,

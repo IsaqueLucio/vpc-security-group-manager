@@ -13,6 +13,11 @@ from app.modules.subnets.router import router as subnets_router
 from app.modules.ip_allocations.router import router as ip_allocations_router
 from app.modules.internet_gateways.router import router as internet_gateways_router
 from app.modules.nat_gateways.router import router as nat_gateways_router
+from app.modules.route_tables.router import router as route_tables_router
+from app.modules.routes.router import router as routes_router
+from app.modules.route_table_associations.router import (
+    router as route_table_associations_router,
+)
 from app.modules.users.router import admin_router, router as users_router
 
 
@@ -48,6 +53,9 @@ app.include_router(subnets_router)
 app.include_router(ip_allocations_router)
 app.include_router(internet_gateways_router)
 app.include_router(nat_gateways_router)
+app.include_router(route_tables_router)
+app.include_router(routes_router)
+app.include_router(route_table_associations_router)
 app.include_router(users_router)
 app.include_router(admin_router)
 

@@ -236,6 +236,43 @@ Creating another active Internet Gateway returns `409`. Attempting to create a
 NAT Gateway for a `PRIVATE` subnet returns `422`. Deleting a VPC or subnet
 soft-deletes its dependent gateway records in the same transaction.
 
+## Route Table APIs
+
+Route Tables belong to a VPC. Routes support `LOCAL`, `INTERNET_GATEWAY`, and
+`NAT_GATEWAY` targets. Gateway targets must be active and belong to the same
+VPC as the Route Table; `LOCAL` routes do not accept `target_id`. Each Subnet
+can have only one non-deleted Route Table association. Creating a second
+association returns `409` rather than silently replacing the first. Deleting a
+Route Table, Subnet, or VPC soft-deletes its dependent routes and associations
+in the same transaction. These records configure routes only; they do not
+simulate packet forwarding.
+
+```bash
+# Create/list route tables for a VPC.
+curl -X POST "http://127.0.0.1:8000/vpcs/<vpc-id>/route-tables" \
+  -H "Authorization: ******" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"main"}'
+curl -H "Authorization: ******" \
+  "http://127.0.0.1:8000/vpcs/<vpc-id>/route-tables"
+
+# Add a default route using an Internet Gateway in that same VPC.
+curl -X POST "http://127.0.0.1:8000/route-tables/<route-table-id>/routes" \
+  -H "Authorization: ******" \
+  -H 'Content-Type: application/json' \
+  -d '{"destination_cidr":"0.0.0.0/0","target_type":"INTERNET_GATEWAY","target_id":"<igw-id>"}'
+
+# Associate a Subnet; an existing active association produces 409.
+curl -X POST "http://127.0.0.1:8000/subnets/<subnet-id>/route-table-association" \
+  -H "Authorization: ******" \
+  -H 'Content-Type: application/json' \
+  -d '{"route_table_id":"<route-table-id>"}'
+```
+
+Non-owners receive `404`; admins may operate on any owner's resources.
+Cross-VPC associations return `422`, as do malformed CIDRs and gateway targets
+that are missing, inactive, or belong to another VPC.
+
 For a manual check, create a subnet and replace `<subnet-id>` with its UUID.
 Omit `ip_address` for automatic first-fit, or provide an available address:
 
@@ -355,7 +392,7 @@ complete; route tables and VPC peering remain in progress:
 1. [x] VPC and IP address management.
 2. [x] Subnets and network segmentation, including region-aware availability zones.
 3. [x] Internet and NAT gateways (records and validation; no traffic simulation).
-4. [ ] Route tables and routing.
+4. [x] Route tables and routing configuration (no packet forwarding simulation).
 5. [ ] VPC peering.
 6. [ ] Security groups and firewall rules.
 7. [ ] Configuration validation and diagnostics.

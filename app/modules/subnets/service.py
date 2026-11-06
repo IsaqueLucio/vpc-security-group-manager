@@ -27,6 +27,7 @@ from app.domain.regions import (
 )
 from app.modules.ip_allocations.models import IPAllocation
 from app.modules.nat_gateways.models import NatGateway
+from app.modules.route_table_associations.models import RouteTableAssociation
 from app.modules.subnets.models import Subnet
 from app.modules.subnets.repository import SubnetRepository
 from app.modules.subnets.schemas import SubnetCreate, SubnetUpdate
@@ -230,6 +231,14 @@ class SubnetService:
                 .where(
                     NatGateway.subnet_id == subnet_id,
                     NatGateway.status != ResourceStatus.DELETED,
+                )
+                .values(status=ResourceStatus.DELETED)
+            )
+            self.db.execute(
+                update(RouteTableAssociation)
+                .where(
+                    RouteTableAssociation.subnet_id == subnet_id,
+                    RouteTableAssociation.status != ResourceStatus.DELETED,
                 )
                 .values(status=ResourceStatus.DELETED)
             )
