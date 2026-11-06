@@ -9,6 +9,7 @@ from app.core.exceptions import AppException, app_exception_handler
 from app.modules.auth.router import router as auth_router
 from app.modules.vpcs.router import router as vpcs_router
 from app.modules.subnets.router import router as subnets_router
+from app.modules.ip_allocations.router import router as ip_allocations_router
 from app.modules.users.router import admin_router, router as users_router
 
 
@@ -41,6 +42,7 @@ async def add_process_time_header(
 app.include_router(auth_router)
 app.include_router(vpcs_router)
 app.include_router(subnets_router)
+app.include_router(ip_allocations_router)
 app.include_router(users_router)
 app.include_router(admin_router)
 

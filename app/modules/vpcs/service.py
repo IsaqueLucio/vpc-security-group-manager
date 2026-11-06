@@ -1,7 +1,7 @@
 from time import sleep
 from uuid import UUID
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 
@@ -23,6 +23,7 @@ from app.domain.networking import (
     validate_prefix_length,
 )
 from app.modules.subnets.models import Subnet
+from app.modules.ip_allocations.models import IPAllocation
 from app.modules.vpcs.models import VPC
 from app.modules.vpcs.repository import VPCRepository
 from app.modules.vpcs.schemas import VPCCreate, VPCUpdate
@@ -127,6 +128,16 @@ class VPCService:
             self.db.execute(
                 update(Subnet)
                 .where(Subnet.vpc_id == vpc_id, Subnet.status != ResourceStatus.DELETED)
+                .values(status=ResourceStatus.DELETED)
+            )
+            self.db.execute(
+                update(IPAllocation)
+                .where(
+                    IPAllocation.subnet_id.in_(
+                        select(Subnet.id).where(Subnet.vpc_id == vpc_id)
+                    ),
+                    IPAllocation.status != ResourceStatus.DELETED,
+                )
                 .values(status=ResourceStatus.DELETED)
             )
             vpc.status = ResourceStatus.DELETED

@@ -31,9 +31,18 @@ def app_exception_for_database_error(exc: DBAPIError) -> AppException | None:
         )
     if sqlstate == "23505":
         constraint = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
-        if constraint in {"uq_vpcs_owner_name_active", "uq_subnets_vpc_name_active"}:
+        if constraint in {
+            "uq_vpcs_owner_name_active",
+            "uq_subnets_vpc_name_active",
+            "uq_ip_allocations_subnet_ip_active",
+        }:
+            detail = (
+                "O IP já está alocado nesta subnet."
+                if constraint == "uq_ip_allocations_subnet_ip_active"
+                else "Já existe um recurso ativo com esse nome."
+            )
             return AppException(
                 status_code=409,
-                detail="Já existe um recurso ativo com esse nome.",
+                detail=detail,
             )
     return None

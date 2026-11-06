@@ -1,6 +1,7 @@
 import ipaddress
 from uuid import UUID
 
+from sqlalchemy import update
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
@@ -19,6 +20,7 @@ from app.domain.networking import (
     validate_prefix_length,
 )
 from app.domain.enums import ResourceStatus
+from app.modules.ip_allocations.models import IPAllocation
 from app.modules.subnets.models import Subnet
 from app.modules.subnets.repository import SubnetRepository
 from app.modules.subnets.schemas import SubnetCreate, SubnetUpdate
@@ -188,13 +190,32 @@ class SubnetService:
         return self._response_values(subnet)
 
     def delete_subnet(self, subnet_id: UUID, owner_id: int) -> SubnetResponseData:
-        subnet = self.subnets.get_active_by_id(subnet_id, owner_id)
-        if subnet is None:
-            raise AppException(status_code=404, detail="Subnet não encontrada.")
-        subnet.status = ResourceStatus.DELETED
-        self.subnets.commit()
-        self.db.refresh(subnet)
-        return self._response_values(subnet)
+        try:
+            set_local_lock_timeout(self.db)
+            subnet = self.subnets.get_owned_by_id_for_update(subnet_id, owner_id)
+            if subnet is None or subnet.status == ResourceStatus.DELETED:
+                self.db.rollback()
+                raise AppException(status_code=404, detail="Subnet não encontrada.")
+            self.db.execute(
+                update(IPAllocation)
+                .where(
+                    IPAllocation.subnet_id == subnet_id,
+                    IPAllocation.status != ResourceStatus.DELETED,
+                )
+                .values(status=ResourceStatus.DELETED)
+            )
+            subnet.status = ResourceStatus.DELETED
+            self.subnets.commit()
+            self.db.refresh(subnet)
+            return self._response_values(subnet)
+        except AppException:
+            raise
+        except DBAPIError as exc:
+            self.db.rollback()
+            app_error = app_exception_for_database_error(exc)
+            if app_error is not None:
+                raise app_error from exc
+            raise
 
     def _response_values(self, subnet: Subnet) -> SubnetResponseData:
         network = ipaddress.IPv4Network(str(subnet.cidr_block))

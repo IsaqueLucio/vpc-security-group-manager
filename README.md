@@ -141,8 +141,8 @@ The temporary owner dependency returns user ID `1`; create a user first so
 that this ID exists. This mock is not authentication and will be replaced by
 the authenticated user dependency in a later lot. PATCH accepts only `name`
 and `description`; status changes are internal. DELETE soft-deletes the VPC;
-active subnets are soft-deleted in the same transaction. IP allocation
-cascading remains deferred until that resource is implemented.
+active subnets and their active IP allocations are soft-deleted in the same
+transaction.
 
 The background activation task waits `VPC_PROVISIONING_DELAY_SECONDS`
 (default `30`) and then changes a still-pending VPC to `ACTIVE`. This
@@ -185,6 +185,33 @@ wait
 Successful requests should return different CIDRs. If allocation cannot
 proceed, the API returns a clear `409` or `503` rather than persisting an
 overlap.
+
+IP addresses are allocated under `/subnets/{subnet-id}/ip-allocations`.
+Omitting `ip_address` chooses the first available IPv4 address. The network
+address, the following three addresses, and the broadcast address are reserved;
+manual requests for any of these addresses or addresses outside the subnet are
+rejected. `GET /subnets/{subnet-id}/ip-allocations` lists active allocations,
+while `GET /ip-allocations/{id}` and `DELETE /ip-allocations/{id}` operate on a
+single allocation. Deleting an allocation is a soft delete, so the address can
+be reused. Creation locks the subnet row and uses the same configurable lock
+timeout as subnet creation; a timeout returns `503` with `Retry-After`, and an
+active duplicate address returns `409`. Deleting a subnet or VPC soft-deletes
+its active allocations synchronously in the same transaction.
+
+For a manual check, create a subnet and replace `<subnet-id>` with its UUID.
+Omit `ip_address` for automatic first-fit, or provide an available address:
+
+```bash
+curl -X POST http://127.0.0.1:8000/subnets/<subnet-id>/ip-allocations \
+  -H 'Content-Type: application/json' \
+  -d '{}'
+curl -X POST http://127.0.0.1:8000/subnets/<subnet-id>/ip-allocations \
+  -H 'Content-Type: application/json' \
+  -d '{"ip_address":"10.20.0.20","description":"application host"}'
+curl http://127.0.0.1:8000/subnets/<subnet-id>/ip-allocations
+```
+
+The Swagger UI at <http://127.0.0.1:8000/docs> exposes the same endpoints.
 
 ## Manual VPC checks
 

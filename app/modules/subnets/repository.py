@@ -66,6 +66,15 @@ class SubnetRepository:
             statement = statement.where(Subnet.id != exclude_id)
         return self.db.scalar(statement)
 
+    def get_owned_by_id_for_update(self, subnet_id: UUID, owner_id: int) -> Subnet | None:
+        statement = (
+            select(Subnet)
+            .join(VPC, VPC.id == Subnet.vpc_id)
+            .where(Subnet.id == subnet_id, VPC.owner_id == owner_id)
+            .with_for_update(of=Subnet)
+        )
+        return self.db.scalar(statement)
+
     def list_active_cidrs(self, vpc_id: UUID) -> list[str]:
         statement = select(Subnet.cidr_block).where(
             Subnet.vpc_id == vpc_id,
