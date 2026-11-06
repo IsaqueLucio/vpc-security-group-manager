@@ -29,6 +29,14 @@ class VPCRepository:
         )
         return self.db.scalar(statement)
 
+    def get_owned_by_id_for_update(self, vpc_id: UUID, owner_id: int) -> VPC | None:
+        statement = (
+            select(VPC)
+            .where(VPC.id == vpc_id, VPC.owner_id == owner_id)
+            .with_for_update()
+        )
+        return self.db.scalar(statement)
+
     def get_active_by_name(self, owner_id: int, name: str, exclude_id: UUID | None = None) -> VPC | None:
         statement = select(VPC).where(
             VPC.owner_id == owner_id,

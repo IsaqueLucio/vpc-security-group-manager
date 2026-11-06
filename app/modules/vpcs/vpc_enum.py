@@ -7,8 +7,10 @@ class VpcStatus(str, Enum):
     ERROR = "ERROR"
     DELETED = "DELETED"
 
-from enum import Enum
 
+class SubnetType(str, Enum):
+    PUBLIC = "PUBLIC"
+    PRIVATE = "PRIVATE"
 
 class AWSRegion(str, Enum):
     # América do Norte (EUA e Canadá)

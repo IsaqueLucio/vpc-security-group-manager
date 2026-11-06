@@ -2,7 +2,7 @@
 
 **Status: backend foundation with initial VPC management.** This repository
 provides application, persistence, authentication, authorization, test
-infrastructure, and initial VPC CRUD endpoints. Subnet and IP allocation
+infrastructure, and initial VPC and subnet endpoints. IP allocation
 endpoints and the remaining network-management behavior are not implemented.
 
 ## Project overview
@@ -102,6 +102,7 @@ Copy `.env.example` to `.env` and set:
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Access-token lifetime | `30` |
 | `VPC_LIMIT_PER_OWNER` | Maximum active VPCs per owner | `5` |
 | `VPC_PROVISIONING_DELAY_SECONDS` | Delay before a pending VPC is activated | `30` |
+| `DATABASE_LOCK_TIMEOUT_MS` | Maximum wait for a PostgreSQL row lock | `5000` |
 | `CORS_ORIGINS` | JSON array of allowed browser origins | Localhost ports 3000 and 5173 |
 
 Do not commit `.env` or use development signing keys in deployed environments.
@@ -134,13 +135,50 @@ The temporary owner dependency returns user ID `1`; create a user first so
 that this ID exists. This mock is not authentication and will be replaced by
 the authenticated user dependency in a later lot. PATCH accepts only `name`
 and `description`; status changes are internal. DELETE soft-deletes the VPC;
-child-resource cascading is deferred to the subnet/IP allocation lot.
+active subnets are soft-deleted in the same transaction. IP allocation
+cascading remains deferred until that resource is implemented.
 
 The background activation task waits `VPC_PROVISIONING_DELAY_SECONDS`
 (default `30`) and then changes a still-pending VPC to `ACTIVE`. This
 simplified task runs only while the API process is alive; it is not durable
 across restarts and is not a distributed job scheduler. The per-owner quota is
 configured by `VPC_LIMIT_PER_OWNER` (default `5`).
+
+## Subnet API and allocation concurrency
+
+Subnets are created/listed under `/vpcs/{vpc_id}/subnets` and read, updated,
+or soft-deleted through `/subnets/{id}`. Omitting `cidr_block` selects the
+first free block in ascending order; `prefix_length` chooses its size and
+defaults to `/24`. A manual `cidr_block` can be used instead. `type` is
+required, and `availability_zone` is stored without region validation. The
+response includes `total_ips`, `usable_ips`, and `available_ips`.
+
+Before allocation, the API locks the parent VPC row with `SELECT ... FOR
+UPDATE`, then checks active child CIDRs and inserts the subnet in that same
+transaction. The lock wait is limited by `DATABASE_LOCK_TIMEOUT_MS` (default
+`5000`); a timeout returns `503` and `Retry-After`. PostgreSQL exclusion
+constraints independently reject overlapping active CIDRs, returning `409`
+if that final safeguard fires. The row lock serializes cooperating API
+requests; the exclusion constraint also protects against other code paths
+that omit the lock or have a bug. VPC deletion uses the same parent lock and
+soft-deletes active subnets in the same transaction.
+
+To reproduce an allocation race, create a VPC first, then issue two requests
+for automatic `/24` subnets concurrently. Replace `<vpc-id>` with the returned
+UUID:
+
+```bash
+for n in 1 2; do
+  curl -sS -X POST "http://127.0.0.1:8000/vpcs/<vpc-id>/subnets" \
+    -H 'Content-Type: application/json' \
+    -d "{\"name\":\"parallel-$n\",\"type\":\"PRIVATE\",\"prefix_length\":24}" &
+done
+wait
+```
+
+Successful requests should return different CIDRs. If allocation cannot
+proceed, the API returns a clear `409` or `503` rather than persisting an
+overlap.
 
 ## Manual VPC checks
 
@@ -185,6 +223,9 @@ password validation, user profile access, administrator authorization, health,
 and absence of the removed legacy routes.
 VPC API integration tests require a migrated PostgreSQL database and can be
 enabled with `RUN_POSTGRES_INTEGRATION_TESTS=1`.
+Subnet integration tests also require PostgreSQL and include concurrent
+first-fit requests and an overlap-constraint check performed without the
+application lock.
 
 ## Migrations
 

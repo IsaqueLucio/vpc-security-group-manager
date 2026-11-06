@@ -2,12 +2,13 @@ from time import sleep
 from uuid import UUID
 
 from sqlalchemy import update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.exceptions import AppException
 from app.database.session import SessionLocal
+from app.modules.vpcs.concurrency import app_exception_for_database_error, set_local_lock_timeout
 from app.domain.networking import (
     InvalidCIDRError,
     PrefixLengthError,
@@ -17,7 +18,7 @@ from app.domain.networking import (
     parse_ipv4_cidr,
     validate_prefix_length,
 )
-from app.modules.vpcs.models import VPC
+from app.modules.vpcs.models import Subnet, VPC
 from app.modules.vpcs.repository import VPCRepository
 from app.modules.vpcs.schemas import VPCCreate, VPCUpdate
 from app.modules.vpcs.vpc_enum import VpcStatus
@@ -79,12 +80,9 @@ class VPCService:
             self.vpcs.add(vpc)
         except IntegrityError as exc:
             self.db.rollback()
-            constraint_name = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
-            if constraint_name == "uq_vpcs_owner_name_active":
-                raise AppException(
-                    status_code=409,
-                    detail="Já existe uma VPC ativa com esse nome.",
-                ) from exc
+            app_error = app_exception_for_database_error(exc)
+            if app_error is not None:
+                raise app_error from exc
             raise
 
         warnings = [] if is_private_cidr(network) else [PUBLIC_CIDR_WARNING]
@@ -115,11 +113,30 @@ class VPCService:
         return vpc
 
     def delete_vpc(self, vpc_id: UUID, owner_id: int) -> VPC:
-        vpc = self.get_vpc(vpc_id, owner_id)
-        vpc.status = VpcStatus.DELETED
-        self.vpcs.commit()
-        self.db.refresh(vpc)
-        return vpc
+        try:
+            set_local_lock_timeout(self.db)
+            vpc = self.vpcs.get_owned_by_id_for_update(vpc_id, owner_id)
+            if vpc is None or vpc.status == VpcStatus.DELETED:
+                self.db.rollback()
+                raise AppException(status_code=404, detail="VPC não encontrada.")
+
+            self.db.execute(
+                update(Subnet)
+                .where(Subnet.vpc_id == vpc_id, Subnet.status != VpcStatus.DELETED)
+                .values(status=VpcStatus.DELETED)
+            )
+            vpc.status = VpcStatus.DELETED
+            self.db.commit()
+            self.db.refresh(vpc)
+            return vpc
+        except AppException:
+            raise
+        except DBAPIError as exc:
+            self.db.rollback()
+            app_error = app_exception_for_database_error(exc)
+            if app_error is not None:
+                raise app_error from exc
+            raise
 
 
 def activate_pending_vpc(vpc_id: UUID) -> None:

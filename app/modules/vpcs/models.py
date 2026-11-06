@@ -13,7 +13,7 @@ from sqlalchemy import (
     Uuid,
     text,
 )
-from sqlalchemy.dialects.postgresql import CIDR, INET
+from sqlalchemy.dialects.postgresql import CIDR, ExcludeConstraint, INET
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base
@@ -30,6 +30,13 @@ class VPC(Base):
         CheckConstraint(
             "masklen(cidr_block) BETWEEN 16 AND 28",
             name="cidr_prefix_length",
+        ),
+        ExcludeConstraint(
+            ("owner_id", "="),
+            ("cidr_block", "&&"),
+            where=ACTIVE_ROW,
+            ops={"cidr_block": "inet_ops"},
+            name="ex_vpcs_owner_cidr_active",
         ),
         Index(
             "uq_vpcs_owner_name_active",
@@ -70,6 +77,13 @@ class Subnet(Base):
         CheckConstraint(
             "masklen(cidr_block) BETWEEN 16 AND 28",
             name="cidr_prefix_length",
+        ),
+        ExcludeConstraint(
+            ("vpc_id", "="),
+            ("cidr_block", "&&"),
+            where=ACTIVE_ROW,
+            ops={"cidr_block": "inet_ops"},
+            name="ex_subnets_vpc_cidr_active",
         ),
         Index(
             "uq_subnets_vpc_name_active",

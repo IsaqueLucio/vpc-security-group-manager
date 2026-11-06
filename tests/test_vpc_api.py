@@ -10,7 +10,7 @@ from app.core.config import settings
 from app.database.session import SessionLocal, get_db
 from app.main import app
 from app.modules.users.models import User, UserRole
-from app.modules.vpcs.models import VPC
+from app.modules.vpcs.models import Subnet, VPC
 from app.modules.vpcs.router import get_vpc_owner_id
 
 
@@ -46,6 +46,9 @@ def postgres_vpc_client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]
     finally:
         app.dependency_overrides.clear()
         with SessionLocal() as db:
+            db.execute(delete(Subnet).where(Subnet.vpc_id.in_(
+                db.query(VPC.id).where(VPC.owner_id == owner_id)
+            )))
             db.execute(delete(VPC).where(VPC.owner_id == owner_id))
             db.execute(delete(User).where(User.id == owner_id))
             db.commit()
