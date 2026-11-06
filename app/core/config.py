@@ -10,6 +10,8 @@ class Settings(BaseSettings):
         "@localhost:5432/vpc_manager"
     )
     access_token_expire_minutes: int = Field(default=30, gt=0)
+    vpc_limit_per_owner: int = Field(default=5, gt=0)
+    vpc_provisioning_delay_seconds: float = Field(default=30, ge=0)
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:3000", "http://localhost:5173"]
     )

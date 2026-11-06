@@ -27,13 +27,13 @@ def test_db() -> Iterator[Session]:
         poolclass=StaticPool,
     )
     testing_session = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    Base.metadata.create_all(bind=engine)
+    Base.metadata.create_all(bind=engine, tables=[User.__table__])
     db = testing_session()
     try:
         yield db
     finally:
         db.close()
-        Base.metadata.drop_all(bind=engine)
+        Base.metadata.drop_all(bind=engine, tables=[User.__table__])
         engine.dispose()
 
 

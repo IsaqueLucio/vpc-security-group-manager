@@ -1,9 +1,9 @@
 # VPC & Security Group Manager
 
-**Status: initial backend foundation.** This repository currently provides
-application, persistence, authentication, authorization, and test
-infrastructure. No VPC-domain phase is marked complete, and no VPC or network
-management behavior has been implemented.
+**Status: backend foundation with initial VPC management.** This repository
+provides application, persistence, authentication, authorization, test
+infrastructure, and initial VPC CRUD endpoints. Subnet and IP allocation
+endpoints and the remaining network-management behavior are not implemented.
 
 ## Project overview
 
@@ -100,6 +100,8 @@ Copy `.env.example` to `.env` and set:
 | `ALGORITHM` | JWT signing algorithm | `HS256` |
 | `DATABASE_URL` | SQLAlchemy connection URL | `postgresql+psycopg://vpc_manager:local-development-only@localhost:5432/vpc_manager` |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Access-token lifetime | `30` |
+| `VPC_LIMIT_PER_OWNER` | Maximum active VPCs per owner | `5` |
+| `VPC_PROVISIONING_DELAY_SECONDS` | Delay before a pending VPC is activated | `30` |
 | `CORS_ORIGINS` | JSON array of allowed browser origins | Localhost ports 3000 and 5173 |
 
 Do not commit `.env` or use development signing keys in deployed environments.
@@ -119,6 +121,41 @@ The API is exposed on port `8000`. The API container runs `alembic upgrade head`
 before starting FastAPI. PostgreSQL data is stored in the `postgres-data` named
 volume. Stop the services with `docker compose down`; the database volume is
 retained.
+
+## VPC API
+
+The VPC endpoints are `POST/GET /vpcs` and `GET/PATCH/DELETE /vpcs/{id}`.
+Creation validates canonical IPv4 CIDRs, prefix length, reserved ranges,
+per-owner name uniqueness, overlap, and the configurable per-owner quota.
+Public CIDRs are accepted with a warning in the response. New VPCs start as
+`PENDING` and the response includes that initial state.
+
+The temporary owner dependency returns user ID `1`; create a user first so
+that this ID exists. This mock is not authentication and will be replaced by
+the authenticated user dependency in a later lot. PATCH accepts only `name`
+and `description`; status changes are internal. DELETE soft-deletes the VPC;
+child-resource cascading is deferred to the subnet/IP allocation lot.
+
+The background activation task waits `VPC_PROVISIONING_DELAY_SECONDS`
+(default `30`) and then changes a still-pending VPC to `ACTIVE`. This
+simplified task runs only while the API process is alive; it is not durable
+across restarts and is not a distributed job scheduler. The per-owner quota is
+configured by `VPC_LIMIT_PER_OWNER` (default `5`).
+
+## Manual VPC checks
+
+With the API running, open <http://127.0.0.1:8000/docs>. Alternatively, create
+a user first with `POST /auth/register`, then create and inspect a VPC:
+
+```bash
+curl -X POST http://127.0.0.1:8000/vpcs \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"example-vpc","cidr_block":"10.20.0.0/16","region":"us-east-1"}'
+curl http://127.0.0.1:8000/vpcs
+```
+
+In this lot, the VPC endpoints use the temporary mock owner and do not yet
+require a JWT. Do not expose this setup as a production authentication model.
 
 ## Authentication and authorization
 
@@ -146,6 +183,8 @@ pytest
 Unit tests use an isolated in-memory SQLite database and cover authentication,
 password validation, user profile access, administrator authorization, health,
 and absence of the removed legacy routes.
+VPC API integration tests require a migrated PostgreSQL database and can be
+enabled with `RUN_POSTGRES_INTEGRATION_TESTS=1`.
 
 ## Migrations
 
@@ -163,7 +202,7 @@ migrations in CI before the unit tests.
 
 ## Roadmap
 
-All domain phases below remain **not started**:
+The VPC portion of Phase 01 is in progress; the remaining phases are not started:
 
 1. VPC and IP address management.
 2. Subnets and network segmentation.

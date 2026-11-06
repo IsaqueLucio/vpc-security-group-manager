@@ -24,6 +24,7 @@ jobs:
     env:
       SECRET_KEY: ci-only-secret-key-of-at-least-32-characters
       DATABASE_URL: postgresql+psycopg://vpc_manager:ci-only-password@localhost:5432/vpc_manager
+      RUN_POSTGRES_INTEGRATION_TESTS: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
