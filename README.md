@@ -94,6 +94,8 @@ the schema is managed by Alembic migrations.
 Interactive API documentation is available at
 <http://127.0.0.1:8000/docs>. API routes, including health, require a valid
 bearer token except for `POST /auth/login`.
+See [docs/api.md](./docs/api.md) for the full endpoint reference, expected
+flows, request/response examples, and authorization behavior.
 
 ## Environment configuration
 
