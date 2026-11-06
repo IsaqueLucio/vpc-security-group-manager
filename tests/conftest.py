@@ -3,7 +3,8 @@ from collections.abc import Iterator
 
 os.environ.setdefault("SECRET_KEY", "test-only-secret-key-that-is-at-least-32-characters")
 os.environ.setdefault("ALGORITHM", "HS256")
-os.environ.setdefault("DATABASE_URL", "sqlite://")
+if os.getenv("RUN_POSTGRES_INTEGRATION_TESTS") != "1":
+    os.environ.setdefault("DATABASE_URL", "sqlite://")
 os.environ.setdefault("ACCESS_TOKEN_EXPIRE_MINUTES", "30")
 
 import pytest
