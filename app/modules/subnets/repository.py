@@ -49,6 +49,9 @@ class SubnetRepository:
             statement = statement.where(VPC.owner_id == owner_id)
         return self.db.scalar(statement)
 
+    def get_vpc_region(self, vpc_id: UUID) -> str | None:
+        return self.db.scalar(select(VPC.region).where(VPC.id == vpc_id))
+
     def get_active_by_name(
         self,
         vpc_id: UUID,

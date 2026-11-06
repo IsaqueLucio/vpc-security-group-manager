@@ -156,8 +156,10 @@ Subnets are created/listed under `/vpcs/{vpc_id}/subnets` and read, updated,
 or soft-deleted through `/subnets/{id}`. Omitting `cidr_block` selects the
 first free block in ascending order; `prefix_length` chooses its size and
 defaults to `/24`. A manual `cidr_block` can be used instead. `type` is
-required, and `availability_zone` is stored without region validation. The
-response includes `total_ips`, `usable_ips`, and `available_ips`.
+required. Optional `availability_zone` values are validated against the
+parent VPC region using a static catalog (including `sa-east-1`, `us-east-1`,
+`us-west-2`, and `eu-west-1`) on both creation and update. The response
+includes `total_ips`, `usable_ips`, and `available_ips`.
 
 Before allocation, the API locks the parent VPC row with `SELECT ... FOR
 UPDATE`, then checks active child CIDRs and inserts the subnet in that same
@@ -311,17 +313,20 @@ migrations in CI before the unit tests.
 
 ## Roadmap
 
-The VPC portion of Phase 01 is in progress; the remaining phases are not started:
+Phase 01 is being implemented in increments. VPC, subnet and IP allocation
+management and subnet availability-zone validation are complete; gateways,
+route tables and VPC peering remain in progress:
 
-1. VPC and IP address management.
-2. Subnets and network segmentation.
-3. Route tables and routing.
-4. Security groups and firewall rules.
-5. Configuration validation and diagnostics.
-6. Firewall requests and approvals.
-7. Audit records.
-8. Simulated provisioning and provider boundaries.
+1. [x] VPC and IP address management.
+2. [x] Subnets and network segmentation, including region-aware availability zones.
+3. [ ] Internet and NAT gateways.
+4. [ ] Route tables and routing.
+5. [ ] VPC peering.
+6. [ ] Security groups and firewall rules.
+7. [ ] Configuration validation and diagnostics.
+8. [ ] Firewall requests and approvals.
+9. [ ] Audit records.
+10. [ ] Simulated provisioning and provider boundaries.
 
-The repository is at the foundation stage and is being prepared to begin
-**Phase 01: VPC and IP Address Management**. No work in that phase is claimed
-as complete.
+Security groups, configuration validation, firewall requests, audit records,
+and provider-backed provisioning are future work.

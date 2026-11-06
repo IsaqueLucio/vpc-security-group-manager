@@ -75,13 +75,13 @@ def postgres_subnet_client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClie
             db.commit()
 
 
-def create_vpc(client: TestClient) -> str:
+def create_vpc(client: TestClient, *, region: str = "us-east-1") -> str:
     response = client.post(
         "/vpcs",
         json={
             "name": "subnet-test-vpc",
             "cidr_block": "10.80.0.0/16",
-            "region": "us-east-1",
+            "region": region,
         },
     )
     assert response.status_code == 201, response.text
@@ -112,6 +112,87 @@ def test_automatic_subnet_defaults_to_first_fit_24(postgres_subnet_client: TestC
     subnet = create_subnet(postgres_subnet_client, vpc_id)
     assert subnet["cidr_block"] == "10.80.0.0/24"
     assert subnet["status"] == "PENDING"
+
+
+def test_subnet_accepts_availability_zone_in_vpc_region(
+    postgres_subnet_client: TestClient,
+) -> None:
+    vpc_id = create_vpc(postgres_subnet_client, region="sa-east-1")
+
+    subnet = postgres_subnet_client.post(
+        f"/vpcs/{vpc_id}/subnets",
+        json={
+            "name": "zone-valid",
+            "type": "PRIVATE",
+            "availability_zone": "sa-east-1a",
+        },
+    )
+
+    assert subnet.status_code == 201, subnet.text
+    assert subnet.json()["availability_zone"] == "sa-east-1a"
+
+
+def test_subnet_rejects_availability_zone_from_another_region(
+    postgres_subnet_client: TestClient,
+) -> None:
+    vpc_id = create_vpc(postgres_subnet_client, region="sa-east-1")
+
+    response = postgres_subnet_client.post(
+        f"/vpcs/{vpc_id}/subnets",
+        json={
+            "name": "zone-wrong-region",
+            "type": "PRIVATE",
+            "availability_zone": "us-east-1a",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_subnet_rejects_availability_zone_when_vpc_region_is_not_cataloged(
+    postgres_subnet_client: TestClient,
+) -> None:
+    vpc_id = create_vpc(postgres_subnet_client)
+    with SessionLocal() as db:
+        db.execute(
+            update(VPC)
+            .where(VPC.id == UUID(vpc_id))
+            .values(region="ap-south-1")
+        )
+        db.commit()
+
+    response = postgres_subnet_client.post(
+        f"/vpcs/{vpc_id}/subnets",
+        json={
+            "name": "unknown-region",
+            "type": "PRIVATE",
+            "availability_zone": "ap-south-1a",
+        },
+    )
+
+    assert response.status_code == 422
+    assert "não possui zonas catalogadas" in response.json()["detail"]
+
+
+def test_subnet_update_validates_availability_zone_and_omission_remains_valid(
+    postgres_subnet_client: TestClient,
+) -> None:
+    vpc_id = create_vpc(postgres_subnet_client, region="sa-east-1")
+    subnet = create_subnet(postgres_subnet_client, vpc_id)
+    assert subnet["availability_zone"] is None
+
+    valid_update = postgres_subnet_client.patch(
+        f"/subnets/{subnet['id']}",
+        json={"availability_zone": "sa-east-1b"},
+    )
+    assert valid_update.status_code == 200, valid_update.text
+    assert valid_update.json()["availability_zone"] == "sa-east-1b"
+
+    invalid_update = postgres_subnet_client.patch(
+        f"/subnets/{subnet['id']}",
+        json={"availability_zone": "us-east-1b"},
+    )
+    assert invalid_update.status_code == 422
 
 
 def test_manual_subnet_must_be_contained_by_vpc(postgres_subnet_client: TestClient) -> None:

@@ -20,6 +20,11 @@ from app.domain.networking import (
     validate_prefix_length,
 )
 from app.domain.enums import ResourceStatus
+from app.domain.regions import (
+    InvalidAvailabilityZoneError,
+    UnknownRegionError,
+    validate_availability_zone,
+)
 from app.modules.ip_allocations.models import IPAllocation
 from app.modules.subnets.models import Subnet
 from app.modules.subnets.repository import SubnetRepository
@@ -51,6 +56,13 @@ class SubnetService:
                     status_code=409,
                     detail="Não é possível criar uma subnet para uma VPC DELETED ou ERROR.",
                 )
+
+            if payload.availability_zone is not None:
+                try:
+                    validate_availability_zone(vpc.region, payload.availability_zone)
+                except (UnknownRegionError, InvalidAvailabilityZoneError) as exc:
+                    self.db.rollback()
+                    raise AppException(status_code=422, detail=str(exc)) from exc
 
             parent_network = parse_ipv4_cidr(vpc.cidr_block)
             if payload.cidr_block is None:
@@ -167,6 +179,14 @@ class SubnetService:
         if subnet is None:
             raise AppException(status_code=404, detail="Subnet não encontrada.")
         changes = payload.model_dump(exclude_unset=True)
+        if changes.get("availability_zone") is not None:
+            region = self.subnets.get_vpc_region(subnet.vpc_id)
+            if region is None:
+                raise AppException(status_code=404, detail="VPC não encontrada.")
+            try:
+                validate_availability_zone(region, changes["availability_zone"])
+            except (UnknownRegionError, InvalidAvailabilityZoneError) as exc:
+                raise AppException(status_code=422, detail=str(exc)) from exc
         if "name" in changes and self.subnets.get_active_by_name(
             subnet.vpc_id,
             changes["name"],

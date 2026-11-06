@@ -366,7 +366,11 @@ Para escolher outro tamanho, use `prefix_length` (16 a 28):
 ```
 
 Envie `cidr_block` ou `prefix_length`, não ambos. `availability_zone` é
-armazenado, sem validação de correspondência com a região.
+opcional; quando informada, precisa pertencer ao catálogo estático da região
+da VPC. O catálogo atual inclui `sa-east-1`, `us-east-1`, `us-west-2` e
+`eu-west-1`. Região não catalogada ou zona de outra região retorna `422`.
+PATCH também valida alterações de `availability_zone`; enviar `null` limpa
+esse campo.
 
 A alocação automática bloqueia a linha da VPC durante a seleção do primeiro
 bloco livre. O timeout de lock é configurado por `DATABASE_LOCK_TIMEOUT_MS`
@@ -409,8 +413,9 @@ Retorna uma Subnet ativa acessível, com métricas de capacidade e disponibilida
 ### `PATCH /subnets/{subnet_id}`
 
 Altera somente `name` e/ou `type`. Envie pelo menos um campo. `name` tem entre
-1 e 100 caracteres; `type` é `PUBLIC` ou `PRIVATE`. Status, CIDR, VPC e
-availability zone não são alteráveis por PATCH.
+1 e 100 caracteres; `type` é `PUBLIC` ou `PRIVATE`. Também é possível alterar
+`availability_zone` usando uma zona existente no catálogo da região da VPC.
+Enviar `null` remove a zona. Status, CIDR e VPC não são alteráveis por PATCH.
 
 ### `DELETE /subnets/{subnet_id}`
 
