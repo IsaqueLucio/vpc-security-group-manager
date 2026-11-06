@@ -1,30 +1,19 @@
-from contextlib import asynccontextmanager
 from time import perf_counter
-from typing import AsyncIterator, Callable
+from typing import Callable
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.exceptions import AppException, app_exception_handler
-from app.database.base import Base
-from app.database.session import engine
 from app.modules.auth.router import router as auth_router
-from app.modules.users.models import User
 from app.modules.users.router import admin_router, router as users_router
-
-
-@asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    Base.metadata.create_all(bind=engine)
-    yield
 
 
 app = FastAPI(
     title="VPC & Security Group Manager",
     description="Backend foundation for cloud network management.",
     version="0.1.0",
-    lifespan=lifespan,
 )
 app.add_exception_handler(AppException, app_exception_handler)
 

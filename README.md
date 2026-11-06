@@ -22,8 +22,8 @@ user management, and health endpoints.
 - Python 3.12+
 - FastAPI and Uvicorn
 - Pydantic Settings and Pydantic validation
-- SQLAlchemy 2 and SQLite by default
-- Alembic configuration for future schema migrations
+- SQLAlchemy 2 and PostgreSQL by default
+- Alembic-managed database schema
 - JWT access tokens and bcrypt password hashing
 - Pytest and FastAPI `TestClient`
 - Docker and Docker Compose
@@ -75,15 +75,17 @@ Replace the example `SECRET_KEY` with a randomly generated value of at least
 openssl rand -hex 32
 ```
 
-Install dependencies and start the API:
+Install dependencies, start PostgreSQL, apply migrations, and start the API:
 
 ```bash
 pip install -r requirements.txt
+docker compose up -d postgres
+alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
-The default local database is SQLite at `./vpc_manager.db`. Tables for the
-currently implemented user model are created when the application starts.
+PostgreSQL is the default database. Application startup does not create tables;
+the schema is managed by Alembic migrations.
 Interactive API documentation is available at
 <http://127.0.0.1:8000/docs>; the health endpoint is
 <http://127.0.0.1:8000/health>.
@@ -96,24 +98,27 @@ Copy `.env.example` to `.env` and set:
 | --- | --- | --- |
 | `SECRET_KEY` | Signing key for access tokens; at least 32 characters | Required |
 | `ALGORITHM` | JWT signing algorithm | `HS256` |
-| `DATABASE_URL` | SQLAlchemy connection URL | `sqlite:///./vpc_manager.db` |
+| `DATABASE_URL` | SQLAlchemy connection URL | `postgresql+psycopg://vpc_manager:local-development-only@localhost:5432/vpc_manager` |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Access-token lifetime | `30` |
 | `CORS_ORIGINS` | JSON array of allowed browser origins | Localhost ports 3000 and 5173 |
 
 Do not commit `.env` or use development signing keys in deployed environments.
-For a non-SQLite database, configure a matching SQLAlchemy DBAPI driver.
+The values in `.env.example` are local-development placeholders; replace them
+with secure values where appropriate.
 
 ## Docker
 
-Create `.env` from `.env.example`, set `SECRET_KEY`, then start the container:
+Create `.env` from `.env.example`, set `SECRET_KEY`, then start the API and
+PostgreSQL containers:
 
 ```bash
 docker compose up --build
 ```
 
-The API is exposed on port `8000`. Compose stores the SQLite database in the
-`app-data` named volume. Stop the service with `docker compose down`; the
-database volume is retained.
+The API is exposed on port `8000`. The API container runs `alembic upgrade head`
+before starting FastAPI. PostgreSQL data is stored in the `postgres-data` named
+volume. Stop the services with `docker compose down`; the database volume is
+retained.
 
 ## Authentication and authorization
 
@@ -138,24 +143,23 @@ Install project requirements and run:
 pytest
 ```
 
-Tests use an isolated in-memory SQLite database and cover authentication,
+Unit tests use an isolated in-memory SQLite database and cover authentication,
 password validation, user profile access, administrator authorization, health,
 and absence of the removed legacy routes.
 
 ## Migrations
 
-Alembic is configured against the same `DATABASE_URL`. As domain models are
-added, generate and apply migrations with:
+Alembic is configured against `DATABASE_URL`. Generate and apply migrations
+with:
 
 ```bash
 alembic revision --autogenerate -m "describe schema change"
 alembic upgrade head
 ```
 
-The foundation currently uses SQLAlchemy metadata initialization at startup;
-there is no initial Alembic revision yet. Migration generation and rollout
-should become the schema-management path before domain schema changes are
-introduced.
+The initial migration enables `pgcrypto` and `btree_gist` and creates the user,
+VPC, subnet, and IP allocation tables. PostgreSQL integration checks run the
+migrations in CI before the unit tests.
 
 ## Roadmap
 

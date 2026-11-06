@@ -5,6 +5,9 @@ from sqlalchemy import engine_from_config, pool
 
 from app.core.config import settings
 from app.database.base import Base
+from app.modules.vpcs.models import IPAllocation as _IPAllocation
+from app.modules.vpcs.models import Subnet as _Subnet
+from app.modules.vpcs.models import VPC as _VPC
 from app.modules.users.models import User as _User
 
 config = context.config
