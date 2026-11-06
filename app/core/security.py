@@ -25,7 +25,7 @@ def create_access_token(data: Mapping[str, Any]) -> str:
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
 
-def decode_access_token(token: str) -> str | None:
+def decode_access_token(token: str) -> dict[str, Any] | None:
     try:
         payload = jwt.decode(
             token,
@@ -36,4 +36,7 @@ def decode_access_token(token: str) -> str | None:
         return None
 
     subject = payload.get("sub")
-    return subject if isinstance(subject, str) else None
+    role = payload.get("role")
+    if not isinstance(subject, str) or not isinstance(role, str):
+        return None
+    return payload

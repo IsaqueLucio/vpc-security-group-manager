@@ -4,13 +4,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
+from app.core.dependencies import get_current_user, get_resource_owner_id
 from app.database.session import get_db
 from app.modules.ip_allocations.models import IPAllocation
 from app.modules.ip_allocations.schemas import IPAllocationCreate, IPAllocationResponse
 from app.modules.ip_allocations.service import IPAllocationService
-from app.modules.vpcs.router import get_vpc_owner_id
 
-router = APIRouter(tags=["ip-allocations"])
+router = APIRouter(tags=["ip-allocations"], dependencies=[Depends(get_current_user)])
 
 
 @router.post(
@@ -22,7 +22,7 @@ def create_ip_allocation(
     subnet_id: UUID,
     payload: IPAllocationCreate,
     db: Annotated[Session, Depends(get_db)],
-    owner_id: Annotated[int, Depends(get_vpc_owner_id)],
+    owner_id: Annotated[int | None, Depends(get_resource_owner_id)],
 ) -> IPAllocation:
     return IPAllocationService(db).create(subnet_id, owner_id, payload)
 
@@ -34,7 +34,7 @@ def create_ip_allocation(
 def list_ip_allocations(
     subnet_id: UUID,
     db: Annotated[Session, Depends(get_db)],
-    owner_id: Annotated[int, Depends(get_vpc_owner_id)],
+    owner_id: Annotated[int | None, Depends(get_resource_owner_id)],
 ) -> list[IPAllocation]:
     return IPAllocationService(db).list_for_subnet(subnet_id, owner_id)
 
@@ -43,7 +43,7 @@ def list_ip_allocations(
 def get_ip_allocation(
     allocation_id: UUID,
     db: Annotated[Session, Depends(get_db)],
-    owner_id: Annotated[int, Depends(get_vpc_owner_id)],
+    owner_id: Annotated[int | None, Depends(get_resource_owner_id)],
 ) -> IPAllocation:
     return IPAllocationService(db).get(allocation_id, owner_id)
 
@@ -52,6 +52,6 @@ def get_ip_allocation(
 def delete_ip_allocation(
     allocation_id: UUID,
     db: Annotated[Session, Depends(get_db)],
-    owner_id: Annotated[int, Depends(get_vpc_owner_id)],
+    owner_id: Annotated[int | None, Depends(get_resource_owner_id)],
 ) -> IPAllocation:
     return IPAllocationService(db).delete(allocation_id, owner_id)

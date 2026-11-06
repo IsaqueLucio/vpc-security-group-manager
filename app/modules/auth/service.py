@@ -1,6 +1,6 @@
 from app.core.exceptions import AppException
 from app.core.security import create_access_token, hash_password, verify_password
-from app.modules.users.models import User
+from app.modules.users.models import User, UserRole
 from app.modules.users.repository import UserRepository
 from app.modules.users.schemas import UserCreate
 
@@ -27,9 +27,15 @@ class AuthService:
 
     def login(self, email: str, password: str) -> str:
         user = self.users.get_by_email(email)
-        if user is None or not verify_password(password, user.hashed_password):
+        if (
+            user is None
+            or not user.is_active
+            or not verify_password(password, user.hashed_password)
+        ):
             raise AppException(
                 status_code=401,
                 detail="Incorrect username or password.",
             )
-        return create_access_token(data={"sub": user.email})
+        return create_access_token(
+            data={"sub": str(user.id), "role": UserRole(user.role).value}
+        )

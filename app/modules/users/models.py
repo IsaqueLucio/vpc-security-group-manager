@@ -1,6 +1,6 @@
 from enum import Enum
 
-from sqlalchemy import String
+from sqlalchemy import Boolean, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base
@@ -22,4 +22,10 @@ class User(Base):
         String(20),
         nullable=False,
         default=UserRole.USER.value,
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=text("true"),
     )

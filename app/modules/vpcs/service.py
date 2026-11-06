@@ -27,6 +27,7 @@ from app.modules.ip_allocations.models import IPAllocation
 from app.modules.vpcs.models import VPC
 from app.modules.vpcs.repository import VPCRepository
 from app.modules.vpcs.schemas import VPCCreate, VPCUpdate
+from app.modules.users.repository import UserRepository
 
 PUBLIC_CIDR_WARNING = "O CIDR informado é público; verifique se a exposição é intencional."
 
@@ -36,16 +37,26 @@ class VPCService:
         self.db = db
         self.vpcs = VPCRepository(db)
 
-    def list_vpcs(self, owner_id: int, skip: int, limit: int) -> list[VPC]:
+    def list_vpcs(self, owner_id: int | None, skip: int, limit: int) -> list[VPC]:
         return self.vpcs.list_active_by_owner(owner_id, skip, limit)
 
-    def get_vpc(self, vpc_id: UUID, owner_id: int) -> VPC:
+    def get_vpc(self, vpc_id: UUID, owner_id: int | None) -> VPC:
         vpc = self.vpcs.get_active_by_id(vpc_id, owner_id)
         if vpc is None:
             raise AppException(status_code=404, detail="VPC não encontrada.")
         return vpc
 
-    def create_vpc(self, payload: VPCCreate, owner_id: int) -> tuple[VPC, list[str]]:
+    def create_vpc(
+        self,
+        payload: VPCCreate,
+        owner_id: int,
+        authenticated_user_id: int | None = None,
+    ) -> tuple[VPC, list[str]]:
+        if (
+            owner_id != authenticated_user_id
+            and UserRepository(self.db).get_by_id(owner_id) is None
+        ):
+            raise AppException(status_code=404, detail="Usuário proprietário não encontrado.")
         try:
             network = validate_prefix_length(payload.cidr_block, 16, 28)
         except (InvalidCIDRError, PrefixLengthError) as exc:
@@ -93,11 +104,11 @@ class VPCService:
         warnings = [] if is_private_cidr(network) else [PUBLIC_CIDR_WARNING]
         return vpc, warnings
 
-    def update_vpc(self, vpc_id: UUID, owner_id: int, payload: VPCUpdate) -> VPC:
+    def update_vpc(self, vpc_id: UUID, owner_id: int | None, payload: VPCUpdate) -> VPC:
         vpc = self.get_vpc(vpc_id, owner_id)
         changes = payload.model_dump(exclude_unset=True)
         if "name" in changes and self.vpcs.get_active_by_name(
-            owner_id, changes["name"], exclude_id=vpc.id
+            vpc.owner_id, changes["name"], exclude_id=vpc.id
         ):
             raise AppException(status_code=409, detail="Já existe uma VPC ativa com esse nome.")
 
@@ -117,7 +128,7 @@ class VPCService:
             raise
         return vpc
 
-    def delete_vpc(self, vpc_id: UUID, owner_id: int) -> VPC:
+    def delete_vpc(self, vpc_id: UUID, owner_id: int | None) -> VPC:
         try:
             set_local_lock_timeout(self.db)
             vpc = self.vpcs.get_owned_by_id_for_update(vpc_id, owner_id)

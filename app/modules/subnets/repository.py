@@ -13,20 +13,16 @@ class SubnetRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def get_vpc_for_update(self, vpc_id: UUID, owner_id: int) -> VPC | None:
-        statement = (
-            select(VPC)
-            .where(VPC.id == vpc_id, VPC.owner_id == owner_id)
-            .with_for_update()
-        )
+    def get_vpc_for_update(self, vpc_id: UUID, owner_id: int | None) -> VPC | None:
+        statement = select(VPC).where(VPC.id == vpc_id).with_for_update()
+        if owner_id is not None:
+            statement = statement.where(VPC.owner_id == owner_id)
         return self.db.scalar(statement)
 
-    def get_vpc(self, vpc_id: UUID, owner_id: int) -> VPC | None:
-        statement = select(VPC).where(
-            VPC.id == vpc_id,
-            VPC.owner_id == owner_id,
-            VPC.status != ResourceStatus.DELETED,
-        )
+    def get_vpc(self, vpc_id: UUID, owner_id: int | None) -> VPC | None:
+        statement = select(VPC).where(VPC.id == vpc_id, VPC.status != ResourceStatus.DELETED)
+        if owner_id is not None:
+            statement = statement.where(VPC.owner_id == owner_id)
         return self.db.scalar(statement)
 
     def list_active_for_vpc(self, vpc_id: UUID, skip: int, limit: int) -> list[Subnet]:
@@ -39,16 +35,18 @@ class SubnetRepository:
         )
         return list(self.db.scalars(statement).all())
 
-    def get_active_by_id(self, subnet_id: UUID, owner_id: int) -> Subnet | None:
+    def get_active_by_id(self, subnet_id: UUID, owner_id: int | None) -> Subnet | None:
         statement = (
             select(Subnet)
             .join(VPC, VPC.id == Subnet.vpc_id)
             .where(
                 Subnet.id == subnet_id,
-                VPC.owner_id == owner_id,
                 Subnet.status != ResourceStatus.DELETED,
+                VPC.status != ResourceStatus.DELETED,
             )
         )
+        if owner_id is not None:
+            statement = statement.where(VPC.owner_id == owner_id)
         return self.db.scalar(statement)
 
     def get_active_by_name(
@@ -66,13 +64,22 @@ class SubnetRepository:
             statement = statement.where(Subnet.id != exclude_id)
         return self.db.scalar(statement)
 
-    def get_owned_by_id_for_update(self, subnet_id: UUID, owner_id: int) -> Subnet | None:
+    def get_owned_by_id_for_update(
+        self,
+        subnet_id: UUID,
+        owner_id: int | None,
+    ) -> Subnet | None:
         statement = (
             select(Subnet)
             .join(VPC, VPC.id == Subnet.vpc_id)
-            .where(Subnet.id == subnet_id, VPC.owner_id == owner_id)
+            .where(
+                Subnet.id == subnet_id,
+                VPC.status != ResourceStatus.DELETED,
+            )
             .with_for_update(of=Subnet)
         )
+        if owner_id is not None:
+            statement = statement.where(VPC.owner_id == owner_id)
         return self.db.scalar(statement)
 
     def list_active_cidrs(self, vpc_id: UUID) -> list[str]:

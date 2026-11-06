@@ -11,37 +11,42 @@ class VPCRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def list_active_by_owner(self, owner_id: int, skip: int, limit: int) -> list[VPC]:
+    def list_active_by_owner(self, owner_id: int | None, skip: int, limit: int) -> list[VPC]:
         statement = (
             select(VPC)
-            .where(VPC.owner_id == owner_id, VPC.status != ResourceStatus.DELETED)
+            .where(VPC.status != ResourceStatus.DELETED)
             .order_by(VPC.created_at, VPC.id)
             .offset(skip)
             .limit(limit)
         )
+        if owner_id is not None:
+            statement = statement.where(VPC.owner_id == owner_id)
         return list(self.db.scalars(statement).all())
 
-    def get_active_by_id(self, vpc_id: UUID, owner_id: int) -> VPC | None:
-        statement = select(VPC).where(
-            VPC.id == vpc_id,
-            VPC.owner_id == owner_id,
-            VPC.status != ResourceStatus.DELETED,
-        )
+    def get_active_by_id(self, vpc_id: UUID, owner_id: int | None) -> VPC | None:
+        statement = select(VPC).where(VPC.id == vpc_id, VPC.status != ResourceStatus.DELETED)
+        if owner_id is not None:
+            statement = statement.where(VPC.owner_id == owner_id)
         return self.db.scalar(statement)
 
-    def get_owned_by_id_for_update(self, vpc_id: UUID, owner_id: int) -> VPC | None:
-        statement = (
-            select(VPC)
-            .where(VPC.id == vpc_id, VPC.owner_id == owner_id)
-            .with_for_update()
-        )
+    def get_owned_by_id_for_update(
+        self,
+        vpc_id: UUID,
+        owner_id: int | None,
+    ) -> VPC | None:
+        statement = select(VPC).where(VPC.id == vpc_id).with_for_update()
+        if owner_id is not None:
+            statement = statement.where(VPC.owner_id == owner_id)
         return self.db.scalar(statement)
 
-    def get_active_by_name(self, owner_id: int, name: str, exclude_id: UUID | None = None) -> VPC | None:
+    def get_active_by_name(
+        self,
+        owner_id: int,
+        name: str,
+        exclude_id: UUID | None = None,
+    ) -> VPC | None:
         statement = select(VPC).where(
-            VPC.owner_id == owner_id,
-            VPC.name == name,
-            VPC.status != ResourceStatus.DELETED,
+            VPC.owner_id == owner_id, VPC.name == name, VPC.status != ResourceStatus.DELETED
         )
         if exclude_id is not None:
             statement = statement.where(VPC.id != exclude_id)
@@ -55,17 +60,15 @@ class VPCRepository:
         )
         return self.db.scalar(statement)
 
-    def list_active_cidrs(self, owner_id: int) -> list[str]:
-        statement = select(VPC.cidr_block).where(
-            VPC.owner_id == owner_id,
-            VPC.status != ResourceStatus.DELETED,
-        )
+    def list_active_cidrs(self, owner_id: int | None) -> list[str]:
+        statement = select(VPC.cidr_block).where(VPC.status != ResourceStatus.DELETED)
+        if owner_id is not None:
+            statement = statement.where(VPC.owner_id == owner_id)
         return [str(cidr) for cidr in self.db.scalars(statement).all()]
 
     def count_active_by_owner(self, owner_id: int) -> int:
         statement = select(func.count()).select_from(VPC).where(
-            VPC.owner_id == owner_id,
-            VPC.status != ResourceStatus.DELETED,
+            VPC.owner_id == owner_id, VPC.status != ResourceStatus.DELETED
         )
         return int(self.db.scalar(statement) or 0)
 

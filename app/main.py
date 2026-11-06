@@ -1,10 +1,11 @@
 from time import perf_counter
 from typing import Callable
 
-from fastapi import FastAPI, Request, Response
+from fastapi import Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
+from app.core.dependencies import get_current_user
 from app.core.exceptions import AppException, app_exception_handler
 from app.modules.auth.router import router as auth_router
 from app.modules.vpcs.router import router as vpcs_router
@@ -47,7 +48,7 @@ app.include_router(users_router)
 app.include_router(admin_router)
 
 
-@app.get("/")
+@app.get("/", dependencies=[Depends(get_current_user)])
 def get_root() -> dict[str, str]:
     return {
         "api_name": "VPC & Security Group Manager",
@@ -55,6 +56,6 @@ def get_root() -> dict[str, str]:
     }
 
 
-@app.get("/health")
+@app.get("/health", dependencies=[Depends(get_current_user)])
 def get_health() -> dict[str, str]:
     return {"status": "ok"}

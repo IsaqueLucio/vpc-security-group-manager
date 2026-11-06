@@ -1,9 +1,8 @@
 # VPC & Security Group Manager
 
-**Status: backend foundation with initial VPC management.** This repository
-provides application, persistence, authentication, authorization, test
-infrastructure, and initial VPC and subnet endpoints. IP allocation
-endpoints and the remaining network-management behavior are not implemented.
+**Status: backend foundation with VPC, subnet, and IP allocation management.**
+This repository provides application, persistence, JWT authentication,
+ownership-aware authorization, and the initial network resource endpoints.
 
 ## Project overview
 
@@ -58,9 +57,9 @@ router, repository, and service when that behavior is implemented. Shared
 domain types and database helpers live outside the entity modules. HTTP
 routers delegate behavior to services, which use repositories for persistence.
 The SQLAlchemy declarative base uses stable constraint naming to support
-Alembic migrations. IP allocations currently have a persistence model only;
-their API and business logic are deferred. The `providers` package is a
-documented architectural boundary only; it has no provider implementation.
+Alembic migrations. VPC, subnet, and IP allocation APIs apply the same
+ownership-aware authentication. The `providers` package is a documented
+architectural boundary only; it has no provider implementation.
 
 Empty modules and placeholder CRUD endpoints are intentionally not included.
 
@@ -93,8 +92,8 @@ uvicorn app.main:app --reload
 PostgreSQL is the default database. Application startup does not create tables;
 the schema is managed by Alembic migrations.
 Interactive API documentation is available at
-<http://127.0.0.1:8000/docs>; the health endpoint is
-<http://127.0.0.1:8000/health>.
+<http://127.0.0.1:8000/docs>. API routes, including health, require a valid
+bearer token except for `POST /auth/login`.
 
 ## Environment configuration
 
@@ -137,9 +136,8 @@ per-owner name uniqueness, overlap, and the configurable per-owner quota.
 Public CIDRs are accepted with a warning in the response. New VPCs start as
 `PENDING` and the response includes that initial state.
 
-The temporary owner dependency returns user ID `1`; create a user first so
-that this ID exists. This mock is not authentication and will be replaced by
-the authenticated user dependency in a later lot. PATCH accepts only `name`
+VPC ownership is resolved from the JWT user. Admins can access resources for
+any owner; regular users only see their own VPCs. PATCH accepts only `name`
 and `description`; status changes are internal. DELETE soft-deletes the VPC;
 active subnets and their active IP allocations are soft-deleted in the same
 transaction.
@@ -176,7 +174,8 @@ UUID:
 ```bash
 for n in 1 2; do
   curl -sS -X POST "http://127.0.0.1:8000/vpcs/<vpc-id>/subnets" \
-    -H 'Content-Type: application/json' \
+      -H "Authorization: Bearer $TOKEN" \
+      -H 'Content-Type: application/json' \
     -d "{\"name\":\"parallel-$n\",\"type\":\"PRIVATE\",\"prefix_length\":24}" &
 done
 wait
@@ -203,36 +202,67 @@ Omit `ip_address` for automatic first-fit, or provide an available address:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/subnets/<subnet-id>/ip-allocations \
+  -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{}'
 curl -X POST http://127.0.0.1:8000/subnets/<subnet-id>/ip-allocations \
+  -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"ip_address":"10.20.0.20","description":"application host"}'
-curl http://127.0.0.1:8000/subnets/<subnet-id>/ip-allocations
+curl -H "Authorization: Bearer $TOKEN" \
+  http://127.0.0.1:8000/subnets/<subnet-id>/ip-allocations
 ```
 
 The Swagger UI at <http://127.0.0.1:8000/docs> exposes the same endpoints.
 
 ## Manual VPC checks
 
-With the API running, open <http://127.0.0.1:8000/docs>. Alternatively, create
-a user first with `POST /auth/register`, then create and inspect a VPC:
+With the API running, open <http://127.0.0.1:8000/docs>. API routes require a
+valid bearer token except `POST /auth/login`. To try the API, use an
+operationally provisioned admin account, create regular users through the
+authenticated registration endpoint, and log in as each account:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/vpcs \
+ADMIN_TOKEN=$(curl -sS -X POST http://127.0.0.1:8000/auth/login \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -d 'username=admin@example.com&password=<admin-password>' | jq -r .access_token)
+curl -X POST http://127.0.0.1:8000/auth/register \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"name":"example-vpc","cidr_block":"10.20.0.0/16","region":"us-east-1"}'
-curl http://127.0.0.1:8000/vpcs
+  -d '{"username":"alice","email":"alice@example.com","password":"StrongPassword@123"}'
+ALICE_TOKEN=$(curl -sS -X POST http://127.0.0.1:8000/auth/login \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -d 'username=alice@example.com&password=StrongPassword@123' | jq -r .access_token)
+curl -X POST http://127.0.0.1:8000/auth/register \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"bob","email":"bob@example.com","password":"StrongPassword@123"}'
+BOB_TOKEN=$(curl -sS -X POST http://127.0.0.1:8000/auth/login \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -d 'username=bob@example.com&password=StrongPassword@123' | jq -r .access_token)
+VPC_ID=$(curl -sS -X POST http://127.0.0.1:8000/vpcs \
+  -H "Authorization: Bearer $ALICE_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"example-vpc","cidr_block":"10.20.0.0/16","region":"us-east-1"}' \
+  | jq -r .id)
+curl -i -H "Authorization: Bearer $BOB_TOKEN" \
+  "http://127.0.0.1:8000/vpcs/$VPC_ID" # 404: Bob does not own Alice's VPC
+curl -i -H "Authorization: Bearer $ADMIN_TOKEN" \
+  "http://127.0.0.1:8000/vpcs/$VPC_ID" # 200: admin can read any owner's VPC
 ```
 
-In this lot, the VPC endpoints use the temporary mock owner and do not yet
-require a JWT. Do not expose this setup as a production authentication model.
+If Alice requests a VPC owned by another user, the API returns `404`. An admin
+can inspect and manage it. Admin-created VPCs accept an optional `owner_id`;
+when omitted, the VPC belongs to the admin. Regular-user creation schemas do
+not include `owner_id`, and attempts to send it return `422`. The admin's
+destination owner is used for the name uniqueness, quota, and CIDR-overlap
+checks.
 
 ## Authentication and authorization
 
-- `POST /auth/register` creates a regular user. Passwords must contain at
-  least eight characters, an uppercase letter, a digit, and a supported
-  special character.
+- `POST /auth/register` creates a regular user and requires an existing
+  authenticated account. Passwords must contain at least eight characters,
+  an uppercase letter, a digit, and a supported special character.
 - `POST /auth/login` accepts OAuth2 form fields (`username` is the user's
   email) and returns a bearer token.
 - `GET /users/me` returns the authenticated user's public profile.
@@ -241,7 +271,10 @@ require a JWT. Do not expose this setup as a production authentication model.
 
 Registration intentionally does not allow clients to select an administrator
 role. Initial administrator provisioning is an operational task and is not
-implemented as a public endpoint.
+implemented as a public endpoint. User account activity is checked when
+resolving the user from a JWT; inactive accounts receive `401`. The access
+token contains the user's ID and role, while the current database user record
+is authoritative for activity and permissions.
 
 ## Tests
 

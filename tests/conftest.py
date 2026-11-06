@@ -85,11 +85,15 @@ def test_admin(test_db: Session) -> User:
 
 @pytest.fixture
 def test_auth_user(test_user: User) -> dict[str, str]:
-    token = create_access_token(data={"sub": test_user.email})
+    token = create_access_token(
+        data={"sub": str(test_user.id), "role": UserRole(test_user.role).value}
+    )
     return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture
 def test_auth_admin(test_admin: User) -> dict[str, str]:
-    token = create_access_token(data={"sub": test_admin.email})
+    token = create_access_token(
+        data={"sub": str(test_admin.id), "role": UserRole(test_admin.role).value}
+    )
     return {"Authorization": f"Bearer {token}"}

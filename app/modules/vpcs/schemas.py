@@ -19,6 +19,10 @@ class VPCCreate(BaseModel):
     region: AWSRegion
 
 
+class VPCAdminCreate(VPCCreate):
+    owner_id: int | None = Field(default=None, gt=0)
+
+
 class VPCUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

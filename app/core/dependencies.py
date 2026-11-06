@@ -17,14 +17,28 @@ def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],
     db: Annotated[Session, Depends(get_db)],
 ) -> User:
-    email = decode_access_token(token)
-    if email is None:
+    claims = decode_access_token(token)
+    if claims is None:
         raise AppException(status_code=401, detail="Invalid or expired token")
+    subject = claims.get("sub")
+    role = claims.get("role")
+    if not isinstance(subject, str) or not subject.isdigit():
+        raise AppException(status_code=401, detail="Invalid token subject")
+    if role not in {UserRole.USER.value, UserRole.ADMIN.value}:
+        raise AppException(status_code=401, detail="Invalid token role")
 
-    user = UserRepository(db).get_by_email(email)
-    if user is None:
-        raise AppException(status_code=401, detail="User not found")
+    user = UserRepository(db).get_by_id(int(subject))
+    if user is None or not user.is_active:
+        raise AppException(status_code=401, detail="User is inactive or does not exist")
     return user
+
+
+def get_resource_owner_id(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> int | None:
+    if current_user.role == UserRole.ADMIN:
+        return None
+    return current_user.id
 
 
 def require_admin(

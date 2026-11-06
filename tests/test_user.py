@@ -13,3 +13,17 @@ def test_user_me_rejects_invalid_token(client):
         headers={"Authorization": "Bearer invalid-token"},
     )
     assert response.status_code == 401
+
+
+def test_inactive_user_is_rejected_with_existing_valid_token(
+    client,
+    test_user,
+    test_auth_user,
+    test_db,
+):
+    test_user.is_active = False
+    test_db.commit()
+
+    response = client.get("/users/me", headers=test_auth_user)
+
+    assert response.status_code == 401

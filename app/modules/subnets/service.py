@@ -36,7 +36,7 @@ class SubnetService:
     def create_subnet(
         self,
         vpc_id: UUID,
-        owner_id: int,
+        owner_id: int | None,
         payload: SubnetCreate,
     ) -> SubnetResponseData:
         try:
@@ -139,7 +139,7 @@ class SubnetService:
     def list_subnets(
         self,
         vpc_id: UUID,
-        owner_id: int,
+        owner_id: int | None,
         skip: int,
         limit: int,
     ) -> list[SubnetResponseData]:
@@ -151,7 +151,7 @@ class SubnetService:
             for subnet in self.subnets.list_active_for_vpc(vpc_id, skip, limit)
         ]
 
-    def get_subnet(self, subnet_id: UUID, owner_id: int) -> SubnetResponseData:
+    def get_subnet(self, subnet_id: UUID, owner_id: int | None) -> SubnetResponseData:
         subnet = self.subnets.get_active_by_id(subnet_id, owner_id)
         if subnet is None:
             raise AppException(status_code=404, detail="Subnet não encontrada.")
@@ -160,7 +160,7 @@ class SubnetService:
     def update_subnet(
         self,
         subnet_id: UUID,
-        owner_id: int,
+        owner_id: int | None,
         payload: SubnetUpdate,
     ) -> SubnetResponseData:
         subnet = self.subnets.get_active_by_id(subnet_id, owner_id)
@@ -189,7 +189,7 @@ class SubnetService:
             raise
         return self._response_values(subnet)
 
-    def delete_subnet(self, subnet_id: UUID, owner_id: int) -> SubnetResponseData:
+    def delete_subnet(self, subnet_id: UUID, owner_id: int | None) -> SubnetResponseData:
         try:
             set_local_lock_timeout(self.db)
             subnet = self.subnets.get_owned_by_id_for_update(subnet_id, owner_id)

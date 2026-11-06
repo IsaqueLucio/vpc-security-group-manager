@@ -14,6 +14,7 @@ def test_admin_delete_user(client, test_auth_admin):
             "email": "to-delete@example.com",
             "password": "StrongPassword@123",
         },
+        headers=test_auth_admin,
     )
     assert created.status_code == 201
 

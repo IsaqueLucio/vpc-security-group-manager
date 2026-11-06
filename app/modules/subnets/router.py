@@ -4,13 +4,12 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
+from app.core.dependencies import get_current_user, get_resource_owner_id
 from app.database.session import get_db
 from app.modules.subnets.models import Subnet
 from app.modules.subnets.schemas import SubnetCreate, SubnetResponse, SubnetUpdate
 from app.modules.subnets.service import SubnetResponseData, SubnetService
-from app.modules.vpcs.router import get_vpc_owner_id
-
-router = APIRouter(tags=["subnets"])
+router = APIRouter(tags=["subnets"], dependencies=[Depends(get_current_user)])
 
 
 def _subnet_response(values: SubnetResponseData) -> SubnetResponse:
@@ -40,7 +39,7 @@ def create_subnet(
     vpc_id: UUID,
     payload: SubnetCreate,
     db: Annotated[Session, Depends(get_db)],
-    owner_id: Annotated[int, Depends(get_vpc_owner_id)],
+    owner_id: Annotated[int | None, Depends(get_resource_owner_id)],
 ) -> SubnetResponse:
     return _subnet_response(SubnetService(db).create_subnet(vpc_id, owner_id, payload))
 
@@ -49,7 +48,7 @@ def create_subnet(
 def list_subnets(
     vpc_id: UUID,
     db: Annotated[Session, Depends(get_db)],
-    owner_id: Annotated[int, Depends(get_vpc_owner_id)],
+    owner_id: Annotated[int | None, Depends(get_resource_owner_id)],
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> list[SubnetResponse]:
@@ -61,7 +60,7 @@ def list_subnets(
 def get_subnet(
     subnet_id: UUID,
     db: Annotated[Session, Depends(get_db)],
-    owner_id: Annotated[int, Depends(get_vpc_owner_id)],
+    owner_id: Annotated[int | None, Depends(get_resource_owner_id)],
 ) -> SubnetResponse:
     return _subnet_response(SubnetService(db).get_subnet(subnet_id, owner_id))
 
@@ -71,7 +70,7 @@ def update_subnet(
     subnet_id: UUID,
     payload: SubnetUpdate,
     db: Annotated[Session, Depends(get_db)],
-    owner_id: Annotated[int, Depends(get_vpc_owner_id)],
+    owner_id: Annotated[int | None, Depends(get_resource_owner_id)],
 ) -> SubnetResponse:
     return _subnet_response(SubnetService(db).update_subnet(subnet_id, owner_id, payload))
 
@@ -80,6 +79,6 @@ def update_subnet(
 def delete_subnet(
     subnet_id: UUID,
     db: Annotated[Session, Depends(get_db)],
-    owner_id: Annotated[int, Depends(get_vpc_owner_id)],
+    owner_id: Annotated[int | None, Depends(get_resource_owner_id)],
 ) -> SubnetResponse:
     return _subnet_response(SubnetService(db).delete_subnet(subnet_id, owner_id))

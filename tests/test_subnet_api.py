@@ -11,13 +11,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.engine import make_url
 
 from app.core.config import settings
+from app.core.security import create_access_token
 from app.database.session import SessionLocal, get_db
 from app.main import app
 from app.modules.users.models import User, UserRole
 from app.modules.ip_allocations.models import IPAllocation
 from app.modules.subnets.models import Subnet
 from app.modules.vpcs.models import VPC
-from app.modules.vpcs.router import get_vpc_owner_id
 from app.domain.enums import ResourceStatus
 
 
@@ -40,15 +40,18 @@ def postgres_subnet_client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClie
         db.commit()
         db.refresh(user)
         owner_id = user.id
+        token = create_access_token(
+            data={"sub": str(user.id), "role": UserRole(user.role).value}
+        )
 
     def override_get_db():
         with SessionLocal() as db:
             yield db
 
     app.dependency_overrides[get_db] = override_get_db
-    app.dependency_overrides[get_vpc_owner_id] = lambda: owner_id
     try:
         with TestClient(app) as client:
+            client.headers["Authorization"] = f"Bearer {token}"
             yield client
     finally:
         app.dependency_overrides.clear()
@@ -263,7 +266,7 @@ def test_concurrent_first_fit_requests_get_distinct_subnets(
     vpc_id = create_vpc(postgres_subnet_client)
 
     def create_concurrently(index: int):
-        with TestClient(app) as client:
+        with TestClient(app, headers=postgres_subnet_client.headers) as client:
             return client.post(
                 f"/vpcs/{vpc_id}/subnets",
                 json={"name": f"parallel-{index}", "type": "PRIVATE", "prefix_length": 24},

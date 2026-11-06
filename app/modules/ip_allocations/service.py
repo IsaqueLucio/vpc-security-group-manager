@@ -24,7 +24,7 @@ class IPAllocationService:
     def create(
         self,
         subnet_id: UUID,
-        owner_id: int,
+        owner_id: int | None,
         payload: IPAllocationCreate,
     ) -> IPAllocation:
         try:
@@ -88,19 +88,23 @@ class IPAllocationService:
                 raise app_error from exc
             raise
 
-    def list_for_subnet(self, subnet_id: UUID, owner_id: int) -> list[IPAllocation]:
+    def list_for_subnet(
+        self,
+        subnet_id: UUID,
+        owner_id: int | None,
+    ) -> list[IPAllocation]:
         subnet = self.allocations.get_owned_subnet(subnet_id, owner_id)
         if subnet is None or subnet.status == ResourceStatus.DELETED:
             raise AppException(status_code=404, detail="Subnet não encontrada.")
         return self.allocations.list_active_for_subnet(subnet_id)
 
-    def get(self, allocation_id: UUID, owner_id: int) -> IPAllocation:
+    def get(self, allocation_id: UUID, owner_id: int | None) -> IPAllocation:
         allocation = self.allocations.get_active(allocation_id, owner_id)
         if allocation is None:
             raise AppException(status_code=404, detail="Alocação de IP não encontrada.")
         return allocation
 
-    def delete(self, allocation_id: UUID, owner_id: int) -> IPAllocation:
+    def delete(self, allocation_id: UUID, owner_id: int | None) -> IPAllocation:
         try:
             allocation = self.allocations.get_active(allocation_id, owner_id)
             if allocation is None:

@@ -13,32 +13,38 @@ class IPAllocationRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def get_subnet_for_update(self, subnet_id: UUID, owner_id: int) -> Subnet | None:
+    def get_subnet_for_update(
+        self,
+        subnet_id: UUID,
+        owner_id: int | None,
+    ) -> Subnet | None:
         statement = (
             select(Subnet)
             .join(VPC, VPC.id == Subnet.vpc_id)
             .where(
                 Subnet.id == subnet_id,
-                VPC.owner_id == owner_id,
                 VPC.status != ResourceStatus.DELETED,
             )
             .with_for_update(of=Subnet)
         )
+        if owner_id is not None:
+            statement = statement.where(VPC.owner_id == owner_id)
         return self.db.scalar(statement)
 
-    def get_owned_subnet(self, subnet_id: UUID, owner_id: int) -> Subnet | None:
+    def get_owned_subnet(self, subnet_id: UUID, owner_id: int | None) -> Subnet | None:
         statement = (
             select(Subnet)
             .join(VPC, VPC.id == Subnet.vpc_id)
             .where(
                 Subnet.id == subnet_id,
-                VPC.owner_id == owner_id,
                 VPC.status != ResourceStatus.DELETED,
             )
         )
+        if owner_id is not None:
+            statement = statement.where(VPC.owner_id == owner_id)
         return self.db.scalar(statement)
 
-    def get_active(self, allocation_id: UUID, owner_id: int) -> IPAllocation | None:
+    def get_active(self, allocation_id: UUID, owner_id: int | None) -> IPAllocation | None:
         statement = (
             select(IPAllocation)
             .join(Subnet, Subnet.id == IPAllocation.subnet_id)
@@ -48,9 +54,10 @@ class IPAllocationRepository:
                 IPAllocation.status != ResourceStatus.DELETED,
                 Subnet.status != ResourceStatus.DELETED,
                 VPC.status != ResourceStatus.DELETED,
-                VPC.owner_id == owner_id,
             )
         )
+        if owner_id is not None:
+            statement = statement.where(VPC.owner_id == owner_id)
         return self.db.scalar(statement)
 
     def list_active_for_subnet(self, subnet_id: UUID) -> list[IPAllocation]:
