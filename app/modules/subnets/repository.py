@@ -3,8 +3,10 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.modules.vpcs.models import IPAllocation, Subnet, VPC
-from app.modules.vpcs.vpc_enum import VpcStatus
+from app.domain.enums import ResourceStatus
+from app.modules.ip_allocations.models import IPAllocation
+from app.modules.subnets.models import Subnet
+from app.modules.vpcs.models import VPC
 
 
 class SubnetRepository:
@@ -23,14 +25,14 @@ class SubnetRepository:
         statement = select(VPC).where(
             VPC.id == vpc_id,
             VPC.owner_id == owner_id,
-            VPC.status != VpcStatus.DELETED,
+            VPC.status != ResourceStatus.DELETED,
         )
         return self.db.scalar(statement)
 
     def list_active_for_vpc(self, vpc_id: UUID, skip: int, limit: int) -> list[Subnet]:
         statement = (
             select(Subnet)
-            .where(Subnet.vpc_id == vpc_id, Subnet.status != VpcStatus.DELETED)
+            .where(Subnet.vpc_id == vpc_id, Subnet.status != ResourceStatus.DELETED)
             .order_by(Subnet.created_at, Subnet.id)
             .offset(skip)
             .limit(limit)
@@ -44,7 +46,7 @@ class SubnetRepository:
             .where(
                 Subnet.id == subnet_id,
                 VPC.owner_id == owner_id,
-                Subnet.status != VpcStatus.DELETED,
+                Subnet.status != ResourceStatus.DELETED,
             )
         )
         return self.db.scalar(statement)
@@ -58,7 +60,7 @@ class SubnetRepository:
         statement = select(Subnet).where(
             Subnet.vpc_id == vpc_id,
             Subnet.name == name,
-            Subnet.status != VpcStatus.DELETED,
+            Subnet.status != ResourceStatus.DELETED,
         )
         if exclude_id is not None:
             statement = statement.where(Subnet.id != exclude_id)
@@ -67,14 +69,14 @@ class SubnetRepository:
     def list_active_cidrs(self, vpc_id: UUID) -> list[str]:
         statement = select(Subnet.cidr_block).where(
             Subnet.vpc_id == vpc_id,
-            Subnet.status != VpcStatus.DELETED,
+            Subnet.status != ResourceStatus.DELETED,
         )
         return [str(cidr) for cidr in self.db.scalars(statement).all()]
 
     def count_active_allocations(self, subnet_id: UUID) -> int:
         statement = select(func.count()).select_from(IPAllocation).where(
             IPAllocation.subnet_id == subnet_id,
-            IPAllocation.status != VpcStatus.DELETED,
+            IPAllocation.status != ResourceStatus.DELETED,
         )
         return int(self.db.scalar(statement) or 0)
 

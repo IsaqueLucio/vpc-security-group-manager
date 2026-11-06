@@ -3,8 +3,8 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.domain.enums import ResourceStatus
 from app.modules.vpcs.models import VPC
-from app.modules.vpcs.vpc_enum import VpcStatus
 
 
 class VPCRepository:
@@ -14,7 +14,7 @@ class VPCRepository:
     def list_active_by_owner(self, owner_id: int, skip: int, limit: int) -> list[VPC]:
         statement = (
             select(VPC)
-            .where(VPC.owner_id == owner_id, VPC.status != VpcStatus.DELETED)
+            .where(VPC.owner_id == owner_id, VPC.status != ResourceStatus.DELETED)
             .order_by(VPC.created_at, VPC.id)
             .offset(skip)
             .limit(limit)
@@ -25,7 +25,7 @@ class VPCRepository:
         statement = select(VPC).where(
             VPC.id == vpc_id,
             VPC.owner_id == owner_id,
-            VPC.status != VpcStatus.DELETED,
+            VPC.status != ResourceStatus.DELETED,
         )
         return self.db.scalar(statement)
 
@@ -41,7 +41,7 @@ class VPCRepository:
         statement = select(VPC).where(
             VPC.owner_id == owner_id,
             VPC.name == name,
-            VPC.status != VpcStatus.DELETED,
+            VPC.status != ResourceStatus.DELETED,
         )
         if exclude_id is not None:
             statement = statement.where(VPC.id != exclude_id)
@@ -51,21 +51,21 @@ class VPCRepository:
         statement = select(VPC).where(
             VPC.owner_id == owner_id,
             VPC.cidr_block == cidr_block,
-            VPC.status != VpcStatus.DELETED,
+            VPC.status != ResourceStatus.DELETED,
         )
         return self.db.scalar(statement)
 
     def list_active_cidrs(self, owner_id: int) -> list[str]:
         statement = select(VPC.cidr_block).where(
             VPC.owner_id == owner_id,
-            VPC.status != VpcStatus.DELETED,
+            VPC.status != ResourceStatus.DELETED,
         )
         return [str(cidr) for cidr in self.db.scalars(statement).all()]
 
     def count_active_by_owner(self, owner_id: int) -> int:
         statement = select(func.count()).select_from(VPC).where(
             VPC.owner_id == owner_id,
-            VPC.status != VpcStatus.DELETED,
+            VPC.status != ResourceStatus.DELETED,
         )
         return int(self.db.scalar(statement) or 0)
 

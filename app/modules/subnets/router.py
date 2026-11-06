@@ -5,12 +5,12 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
-from app.modules.vpcs.models import Subnet
+from app.modules.subnets.models import Subnet
+from app.modules.subnets.schemas import SubnetCreate, SubnetResponse, SubnetUpdate
+from app.modules.subnets.service import SubnetResponseData, SubnetService
 from app.modules.vpcs.router import get_vpc_owner_id
-from app.modules.vpcs.schemas import SubnetCreate, SubnetResponse, SubnetUpdate
-from app.modules.vpcs.subnet_service import SubnetResponseData, SubnetService
 
-subnet_router = APIRouter(tags=["subnets"])
+router = APIRouter(tags=["subnets"])
 
 
 def _subnet_response(values: SubnetResponseData) -> SubnetResponse:
@@ -31,7 +31,7 @@ def _subnet_response(values: SubnetResponseData) -> SubnetResponse:
     )
 
 
-@subnet_router.post(
+@router.post(
     "/vpcs/{vpc_id}/subnets",
     response_model=SubnetResponse,
     status_code=status.HTTP_201_CREATED,
@@ -45,7 +45,7 @@ def create_subnet(
     return _subnet_response(SubnetService(db).create_subnet(vpc_id, owner_id, payload))
 
 
-@subnet_router.get("/vpcs/{vpc_id}/subnets", response_model=list[SubnetResponse])
+@router.get("/vpcs/{vpc_id}/subnets", response_model=list[SubnetResponse])
 def list_subnets(
     vpc_id: UUID,
     db: Annotated[Session, Depends(get_db)],
@@ -57,7 +57,7 @@ def list_subnets(
     return [_subnet_response(value) for value in values]
 
 
-@subnet_router.get("/subnets/{subnet_id}", response_model=SubnetResponse)
+@router.get("/subnets/{subnet_id}", response_model=SubnetResponse)
 def get_subnet(
     subnet_id: UUID,
     db: Annotated[Session, Depends(get_db)],
@@ -66,7 +66,7 @@ def get_subnet(
     return _subnet_response(SubnetService(db).get_subnet(subnet_id, owner_id))
 
 
-@subnet_router.patch("/subnets/{subnet_id}", response_model=SubnetResponse)
+@router.patch("/subnets/{subnet_id}", response_model=SubnetResponse)
 def update_subnet(
     subnet_id: UUID,
     payload: SubnetUpdate,
@@ -76,7 +76,7 @@ def update_subnet(
     return _subnet_response(SubnetService(db).update_subnet(subnet_id, owner_id, payload))
 
 
-@subnet_router.delete("/subnets/{subnet_id}", response_model=SubnetResponse)
+@router.delete("/subnets/{subnet_id}", response_model=SubnetResponse)
 def delete_subnet(
     subnet_id: UUID,
     db: Annotated[Session, Depends(get_db)],

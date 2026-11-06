@@ -7,8 +7,12 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.exceptions import AppException
+from app.database.concurrency import (
+    app_exception_for_database_error,
+    set_local_lock_timeout,
+)
 from app.database.session import SessionLocal
-from app.modules.vpcs.concurrency import app_exception_for_database_error, set_local_lock_timeout
+from app.domain.enums import ResourceStatus
 from app.domain.networking import (
     InvalidCIDRError,
     PrefixLengthError,
@@ -18,10 +22,10 @@ from app.domain.networking import (
     parse_ipv4_cidr,
     validate_prefix_length,
 )
-from app.modules.vpcs.models import Subnet, VPC
+from app.modules.subnets.models import Subnet
+from app.modules.vpcs.models import VPC
 from app.modules.vpcs.repository import VPCRepository
 from app.modules.vpcs.schemas import VPCCreate, VPCUpdate
-from app.modules.vpcs.vpc_enum import VpcStatus
 
 PUBLIC_CIDR_WARNING = "O CIDR informado é público; verifique se a exposição é intencional."
 
@@ -74,7 +78,7 @@ class VPCService:
             cidr_block=str(network),
             description=payload.description,
             region=payload.region.value,
-            status=VpcStatus.PENDING,
+            status=ResourceStatus.PENDING,
         )
         try:
             self.vpcs.add(vpc)
@@ -116,16 +120,16 @@ class VPCService:
         try:
             set_local_lock_timeout(self.db)
             vpc = self.vpcs.get_owned_by_id_for_update(vpc_id, owner_id)
-            if vpc is None or vpc.status == VpcStatus.DELETED:
+            if vpc is None or vpc.status == ResourceStatus.DELETED:
                 self.db.rollback()
                 raise AppException(status_code=404, detail="VPC não encontrada.")
 
             self.db.execute(
                 update(Subnet)
-                .where(Subnet.vpc_id == vpc_id, Subnet.status != VpcStatus.DELETED)
-                .values(status=VpcStatus.DELETED)
+                .where(Subnet.vpc_id == vpc_id, Subnet.status != ResourceStatus.DELETED)
+                .values(status=ResourceStatus.DELETED)
             )
-            vpc.status = VpcStatus.DELETED
+            vpc.status = ResourceStatus.DELETED
             self.db.commit()
             self.db.refresh(vpc)
             return vpc
@@ -145,7 +149,7 @@ def activate_pending_vpc(vpc_id: UUID) -> None:
     with SessionLocal() as db:
         db.execute(
             update(VPC)
-            .where(VPC.id == vpc_id, VPC.status == VpcStatus.PENDING)
-            .values(status=VpcStatus.ACTIVE)
+            .where(VPC.id == vpc_id, VPC.status == ResourceStatus.PENDING)
+            .values(status=ResourceStatus.ACTIVE)
         )
         db.commit()

@@ -4,8 +4,11 @@ from uuid import UUID
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.core.exceptions import AppException
+from app.database.concurrency import (
+    app_exception_for_database_error,
+    set_local_lock_timeout,
+)
 from app.domain.networking import (
     AddressSpaceExhaustedError,
     InvalidCIDRError,
@@ -15,14 +18,10 @@ from app.domain.networking import (
     parse_ipv4_cidr,
     validate_prefix_length,
 )
-from app.modules.vpcs.concurrency import (
-    app_exception_for_database_error,
-    set_local_lock_timeout,
-)
-from app.modules.vpcs.models import Subnet
-from app.modules.vpcs.schemas import SubnetCreate, SubnetUpdate
-from app.modules.vpcs.subnet_repository import SubnetRepository
-from app.modules.vpcs.vpc_enum import VpcStatus
+from app.domain.enums import ResourceStatus
+from app.modules.subnets.models import Subnet
+from app.modules.subnets.repository import SubnetRepository
+from app.modules.subnets.schemas import SubnetCreate, SubnetUpdate
 
 SubnetResponseData = tuple[Subnet, int, int, int]
 
@@ -44,7 +43,7 @@ class SubnetService:
             if vpc is None:
                 self.db.rollback()
                 raise AppException(status_code=404, detail="VPC não encontrada.")
-            if vpc.status in (VpcStatus.DELETED, VpcStatus.ERROR):
+            if vpc.status in (ResourceStatus.DELETED, ResourceStatus.ERROR):
                 self.db.rollback()
                 raise AppException(
                     status_code=409,
@@ -94,9 +93,12 @@ class SubnetService:
                         status_code=422,
                         detail="O CIDR da subnet deve estar contido no CIDR da VPC.",
                     )
-                existing_cidrs = self.subnets.list_active_cidrs(vpc_id)
                 try:
-                    first_fit_subnet(network, network.prefixlen, existing_cidrs)
+                    first_fit_subnet(
+                        network,
+                        network.prefixlen,
+                        self.subnets.list_active_cidrs(vpc_id),
+                    )
                 except AddressSpaceExhaustedError as exc:
                     self.db.rollback()
                     raise AppException(
@@ -117,7 +119,7 @@ class SubnetService:
                 cidr_block=str(network),
                 type=payload.type.value,
                 availability_zone=payload.availability_zone,
-                status=VpcStatus.PENDING,
+                status=ResourceStatus.PENDING,
             )
             self.subnets.add(subnet)
             self.subnets.commit()
@@ -189,7 +191,7 @@ class SubnetService:
         subnet = self.subnets.get_active_by_id(subnet_id, owner_id)
         if subnet is None:
             raise AppException(status_code=404, detail="Subnet não encontrada.")
-        subnet.status = VpcStatus.DELETED
+        subnet.status = ResourceStatus.DELETED
         self.subnets.commit()
         self.db.refresh(subnet)
         return self._response_values(subnet)

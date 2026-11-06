@@ -44,18 +44,24 @@ app/
 │   └── migrations/
 ├── modules/
 │   ├── auth/
-│   └── users/
+│   ├── users/
+│   ├── vpcs/
+│   ├── subnets/
+│   └── ip_allocations/
+├── domain/
 └── providers/
     └── README.md
 ```
 
-HTTP routers delegate authentication and user-management behavior to services.
-Services use repositories for user persistence. The SQLAlchemy declarative base
-uses stable constraint naming to support future Alembic migrations. The
-`providers` package is a documented architectural boundary only; it has no
-provider or provisioning implementation.
+Each resource module owns its SQLAlchemy model and the corresponding schemas,
+router, repository, and service when that behavior is implemented. Shared
+domain types and database helpers live outside the entity modules. HTTP
+routers delegate behavior to services, which use repositories for persistence.
+The SQLAlchemy declarative base uses stable constraint naming to support
+Alembic migrations. IP allocations currently have a persistence model only;
+their API and business logic are deferred. The `providers` package is a
+documented architectural boundary only; it has no provider implementation.
 
-Future domain modules should be introduced when their implementation begins.
 Empty modules and placeholder CRUD endpoints are intentionally not included.
 
 ## Development setup

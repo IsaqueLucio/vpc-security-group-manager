@@ -14,9 +14,11 @@ from app.core.config import settings
 from app.database.session import SessionLocal, get_db
 from app.main import app
 from app.modules.users.models import User, UserRole
-from app.modules.vpcs.models import IPAllocation, Subnet, VPC
+from app.modules.ip_allocations.models import IPAllocation
+from app.modules.subnets.models import Subnet
+from app.modules.vpcs.models import VPC
 from app.modules.vpcs.router import get_vpc_owner_id
-from app.modules.vpcs.vpc_enum import VpcStatus
+from app.domain.enums import ResourceStatus
 
 
 @pytest.fixture
@@ -183,7 +185,7 @@ def test_available_ip_metric_subtracts_active_allocations(
             IPAllocation(
                 subnet_id=UUID(subnet["id"]),
                 ip_address="10.80.0.4",
-                status=VpcStatus.ACTIVE,
+                status=ResourceStatus.ACTIVE,
             )
         )
         db.commit()
@@ -222,7 +224,7 @@ def test_pending_vpc_allows_subnet_creation(postgres_subnet_client: TestClient) 
         db.execute(
             update(VPC)
             .where(VPC.id == UUID(vpc_id))
-            .values(status=VpcStatus.PENDING)
+            .values(status=ResourceStatus.PENDING)
         )
         db.commit()
 
@@ -252,7 +254,7 @@ def test_vpc_delete_soft_deletes_subnets_synchronously(postgres_subnet_client: T
     with SessionLocal() as db:
         stored_subnet = db.get(Subnet, UUID(subnet["id"]))
         assert stored_subnet is not None
-        assert stored_subnet.status == VpcStatus.DELETED
+        assert stored_subnet.status == ResourceStatus.DELETED
 
 
 def test_concurrent_first_fit_requests_get_distinct_subnets(
@@ -309,7 +311,7 @@ def test_exclusion_constraint_rejects_overlap_without_parent_lock(
                     name=f"without-lock-{index}",
                     cidr_block="10.80.10.0/24",
                     type="PRIVATE",
-                    status=VpcStatus.ACTIVE,
+                    status=ResourceStatus.ACTIVE,
                 )
             )
             barrier.wait(timeout=10)

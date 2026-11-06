@@ -10,7 +10,8 @@ from app.core.config import settings
 from app.database.session import SessionLocal, get_db
 from app.main import app
 from app.modules.users.models import User, UserRole
-from app.modules.vpcs.models import Subnet, VPC
+from app.modules.subnets.models import Subnet
+from app.modules.vpcs.models import VPC
 from app.modules.vpcs.router import get_vpc_owner_id
 
 
