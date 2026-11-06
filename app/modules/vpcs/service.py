@@ -29,6 +29,8 @@ from app.modules.nat_gateways.models import NatGateway
 from app.modules.route_table_associations.models import RouteTableAssociation
 from app.modules.route_tables.models import RouteTable
 from app.modules.routes.models import Route
+from app.modules.vpc_peerings.enums import VpcPeeringStatus
+from app.modules.vpc_peerings.models import VpcPeering
 from app.modules.vpcs.models import VPC
 from app.modules.vpcs.repository import VPCRepository
 from app.modules.vpcs.schemas import VPCCreate, VPCUpdate
@@ -201,6 +203,17 @@ class VPCService:
                     RouteTable.status != ResourceStatus.DELETED,
                 )
                 .values(status=ResourceStatus.DELETED)
+            )
+            self.db.execute(
+                update(VpcPeering)
+                .where(
+                    (
+                        (VpcPeering.requester_vpc_id == vpc_id)
+                        | (VpcPeering.accepter_vpc_id == vpc_id)
+                    ),
+                    VpcPeering.status != VpcPeeringStatus.DELETED,
+                )
+                .values(status=VpcPeeringStatus.DELETED)
             )
             vpc.status = ResourceStatus.DELETED
             self.db.commit()

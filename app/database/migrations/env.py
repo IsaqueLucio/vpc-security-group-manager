@@ -16,6 +16,7 @@ from app.modules.routes.models import Route as _Route
 from app.modules.route_table_associations.models import (
     RouteTableAssociation as _RouteTableAssociation,
 )
+from app.modules.vpc_peerings.models import VpcPeering as _VpcPeering
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))

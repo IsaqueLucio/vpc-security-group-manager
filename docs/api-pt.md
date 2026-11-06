@@ -625,6 +625,77 @@ curl -X POST "http://localhost:8000/subnets/<subnet-id>/route-table-association"
   -d "{\"route_table_id\":\"$TABLE_ID\"}"
 ```
 
+## Endpoints de VPC Peering
+
+VPC Peering registra uma solicitação entre duas VPCs; não implementa
+encaminhamento de pacotes. As VPCs devem ser distintas e seus CIDRs não podem
+se sobrepor (`409`). Uma solicitação começa em `PENDING_ACCEPTANCE`.
+
+### `POST /vpc-peerings`
+
+Cria peering. Usuário comum só pode usar uma VPC própria como `requester`;
+admin pode criar para qualquer proprietário.
+
+```json
+{
+  "requester_vpc_id": "<requester-vpc-id>",
+  "accepter_vpc_id": "<accepter-vpc-id>"
+}
+```
+
+CIDR sobreposto ou par já pendente/ativo retorna `409`. O par é normalizado no
+índice único do PostgreSQL, portanto enviar as mesmas VPCs na ordem inversa
+também retorna `409`. Pares rejeitados ou cancelados podem ser solicitados
+novamente. VPC inexistente/inativa ou requester de outro proprietário retorna
+`404`; tentar usar a mesma VPC nos dois lados retorna `422`.
+
+### `GET /vpc-peerings`
+
+Lista peerings não excluídos dos quais o usuário autenticado participa como
+requester ou accepter. Admin recebe a lista de todos.
+
+### `PATCH /vpc-peerings/{peering_id}`
+
+Aceita ou rejeita uma solicitação pendente:
+
+```json
+{"status": "ACTIVE"}
+```
+
+```json
+{"status": "REJECTED"}
+```
+
+Somente o proprietário da VPC accepter ou admin pode alterar o estado. Se o
+requester tentar aceitar/rejeitar, recebe `403`; um usuário que não participa
+recebe `404`. Transições para estados diferentes de `ACTIVE` e `REJECTED`, ou
+uma alteração depois da decisão, são rejeitadas (`422`/`409`).
+
+### `DELETE /vpc-peerings/{peering_id}`
+
+O proprietário da VPC requester ou admin pode cancelar enquanto o estado for
+`PENDING_ACCEPTANCE`. A operação é soft delete (`DELETED`); accepter sem role
+admin recebe `403` e usuário alheio recebe `404`. Excluir uma VPC também marca
+seus peerings não excluídos como `DELETED`.
+
+Exemplo de fluxo entre dois usuários:
+
+```bash
+# Alice cria uma solicitação da VPC dela para a VPC de Bob.
+curl -X POST http://localhost:8000/vpc-peerings \
+  -H "Authorization: Bearer <alice-token>" \
+  -H 'Content-Type: application/json' \
+  -d '{"requester_vpc_id":"<alice-vpc-id>","accepter_vpc_id":"<bob-vpc-id>"}'
+
+# Bob lista solicitações recebidas e aceita uma como accepter.
+curl -H "Authorization: Bearer <bob-token>" \
+  http://localhost:8000/vpc-peerings
+curl -X PATCH "http://localhost:8000/vpc-peerings/<peering-id>" \
+  -H "Authorization: Bearer <bob-token>" \
+  -H 'Content-Type: application/json' \
+  -d '{"status":"ACTIVE"}'
+```
+
 ## Exemplo completo com dois usuários
 
 O exemplo pressupõe que `ADMIN_TOKEN` tenha sido obtido como mostrado acima,

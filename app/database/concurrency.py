@@ -37,6 +37,7 @@ def app_exception_for_database_error(exc: DBAPIError) -> AppException | None:
             "uq_ip_allocations_subnet_ip_active",
             "uq_internet_gateways_vpc_active",
             "uq_route_table_associations_subnet_active",
+            "uq_vpc_peerings_pair_active",
         }:
             detail = (
                 "O IP já está alocado nesta subnet."
@@ -45,6 +46,8 @@ def app_exception_for_database_error(exc: DBAPIError) -> AppException | None:
                 if constraint == "uq_internet_gateways_vpc_active"
                 else "A Subnet já possui uma Route Table associada."
                 if constraint == "uq_route_table_associations_subnet_active"
+                else "Já existe um peering pendente ou ativo para esse par de VPCs."
+                if constraint == "uq_vpc_peerings_pair_active"
                 else "Já existe um recurso ativo com esse nome."
             )
             return AppException(

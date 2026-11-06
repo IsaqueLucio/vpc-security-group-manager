@@ -273,6 +273,43 @@ Non-owners receive `404`; admins may operate on any owner's resources.
 Cross-VPC associations return `422`, as do malformed CIDRs and gateway targets
 that are missing, inactive, or belong to another VPC.
 
+## VPC Peering API
+
+`POST /vpc-peerings` creates a request between two distinct VPCs. Their CIDRs
+must not overlap (`409` otherwise). A requester may only initiate from a VPC
+they own; admins may create on behalf of any owner. A pair is stored in
+normalized order by a PostgreSQL partial unique index, so a pending or active
+pair submitted in reverse order still returns `409`. Rejected/deleted peerings
+release the pair for a future request.
+
+Peerings start as `PENDING_ACCEPTANCE`. Only the accepter's owner or an admin
+can PATCH the status to `ACTIVE` or `REJECTED`; the requester receives `403`
+for that action, while an unrelated user receives `404`. The requester owner
+or an admin can DELETE a pending peering, which soft-deletes it. A VPC
+soft-delete also soft-deletes its peerings.
+
+```bash
+# Request peering from your VPC to another VPC.
+curl -X POST http://127.0.0.1:8000/vpc-peerings \
+  -H "Authorization: ******" \
+  -H 'Content-Type: application/json' \
+  -d '{"requester_vpc_id":"<requester-vpc-id>","accepter_vpc_id":"<accepter-vpc-id>"}'
+
+# The accepter owner reviews the pending request and accepts it.
+curl -X PATCH "http://127.0.0.1:8000/vpc-peerings/<peering-id>" \
+  -H "Authorization: ******" \
+  -H 'Content-Type: application/json' \
+  -d '{"status":"ACTIVE"}'
+
+# The requester can cancel only while it is still pending.
+curl -X DELETE "http://127.0.0.1:8000/vpc-peerings/<peering-id>" \
+  -H "Authorization: ******"
+```
+
+`GET /vpc-peerings` returns peerings in which the current user owns either
+VPC; admins see all. Peering records configure a relationship only and do not
+provide packet forwarding.
+
 For a manual check, create a subnet and replace `<subnet-id>` with its UUID.
 Omit `ip_address` for automatic first-fit, or provide an available address:
 
@@ -393,7 +430,7 @@ complete; route tables and VPC peering remain in progress:
 2. [x] Subnets and network segmentation, including region-aware availability zones.
 3. [x] Internet and NAT gateways (records and validation; no traffic simulation).
 4. [x] Route tables and routing configuration (no packet forwarding simulation).
-5. [ ] VPC peering.
+5. [x] VPC peering request and acceptance workflow (no packet forwarding simulation).
 6. [ ] Security groups and firewall rules.
 7. [ ] Configuration validation and diagnostics.
 8. [ ] Firewall requests and approvals.
