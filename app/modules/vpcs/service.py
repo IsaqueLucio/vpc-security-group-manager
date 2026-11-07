@@ -31,6 +31,8 @@ from app.modules.route_tables.models import RouteTable
 from app.modules.routes.models import Route
 from app.modules.vpc_peerings.enums import VpcPeeringStatus
 from app.modules.vpc_peerings.models import VpcPeering
+from app.modules.security_group_rules.models import SecurityGroupRule
+from app.modules.security_groups.models import SecurityGroup
 from app.modules.vpcs.models import VPC
 from app.modules.vpcs.repository import VPCRepository
 from app.modules.vpcs.schemas import VPCCreate, VPCUpdate
@@ -214,6 +216,24 @@ class VPCService:
                     VpcPeering.status != VpcPeeringStatus.DELETED,
                 )
                 .values(status=VpcPeeringStatus.DELETED)
+            )
+            self.db.execute(
+                update(SecurityGroupRule)
+                .where(
+                    SecurityGroupRule.security_group_id.in_(
+                        select(SecurityGroup.id).where(SecurityGroup.vpc_id == vpc_id)
+                    ),
+                    SecurityGroupRule.status != ResourceStatus.DELETED,
+                )
+                .values(status=ResourceStatus.DELETED)
+            )
+            self.db.execute(
+                update(SecurityGroup)
+                .where(
+                    SecurityGroup.vpc_id == vpc_id,
+                    SecurityGroup.status != ResourceStatus.DELETED,
+                )
+                .values(status=ResourceStatus.DELETED)
             )
             vpc.status = ResourceStatus.DELETED
             self.db.commit()

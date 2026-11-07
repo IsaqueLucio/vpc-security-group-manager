@@ -310,6 +310,52 @@ curl -X DELETE "http://127.0.0.1:8000/vpc-peerings/<peering-id>" \
 VPC; admins see all. Peering records configure a relationship only and do not
 provide packet forwarding.
 
+## Security Group API
+
+Security Groups and rules provide configuration and input validation only;
+they do not evaluate stateful packet traffic. Groups are created directly as
+`ACTIVE`; DELETE changes them to `DELETED`. Deleting a group soft-deletes its
+active rules in the same transaction, and deleting a VPC soft-deletes all its
+groups and their active rules.
+
+Rules accept `INBOUND` or `OUTBOUND`, with protocol `TCP`, `UDP`, `ICMP`, or
+`ALL`. TCP/UDP require an inclusive port range from `0` to `65535`, where the
+start must not exceed the end. ICMP/ALL reject ports. `cidr_block` uses the
+same canonical IPv4 CIDR validation as the rest of the API.
+
+```bash
+# Create and list a Security Group in a VPC.
+curl -X POST "http://127.0.0.1:8000/vpcs/<vpc-id>/security-groups" \
+  -H "Authorization: Bearer <token>" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"web","description":"web tier"}'
+curl -H "Authorization: Bearer <token>" \
+  "http://127.0.0.1:8000/vpcs/<vpc-id>/security-groups"
+
+# Add/list an inbound HTTPS rule.
+curl -X POST "http://127.0.0.1:8000/security-groups/<security-group-id>/rules" \
+  -H "Authorization: Bearer <token>" \
+  -H 'Content-Type: application/json' \
+  -d '{"direction":"INBOUND","protocol":"TCP","port_range_from":443,"port_range_to":443,"cidr_block":"10.0.0.0/8","description":"HTTPS"}'
+curl -H "Authorization: Bearer <token>" \
+  "http://127.0.0.1:8000/security-groups/<security-group-id>/rules"
+
+# Update name/description or soft-delete the group/rule.
+curl -X PATCH "http://127.0.0.1:8000/security-groups/<security-group-id>" \
+  -H "Authorization: Bearer <token>" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"web-updated"}'
+curl -X DELETE "http://127.0.0.1:8000/security-group-rules/<rule-id>" \
+  -H "Authorization: Bearer <token>"
+curl -X DELETE "http://127.0.0.1:8000/security-groups/<security-group-id>" \
+  -H "Authorization: Bearer <token>"
+```
+
+Non-owners receive `404`; admins may read and write resources for any owner.
+PATCH only accepts `name` and `description`; status is not client-editable.
+Security Group-to-Security Group rule references and actual traffic evaluation
+are not part of this implementation.
+
 For a manual check, create a subnet and replace `<subnet-id>` with its UUID.
 Omit `ip_address` for automatic first-fit, or provide an available address:
 
@@ -431,7 +477,7 @@ complete; route tables and VPC peering remain in progress:
 3. [x] Internet and NAT gateways (records and validation; no traffic simulation).
 4. [x] Route tables and routing configuration (no packet forwarding simulation).
 5. [x] VPC peering request and acceptance workflow (no packet forwarding simulation).
-6. [ ] Security groups and firewall rules.
+6. [~] Security Groups and rule CRUD/validation implemented; Security Group-to-Security Group rule references and traffic evaluation remain pending.
 7. [ ] Configuration validation and diagnostics.
 8. [ ] Firewall requests and approvals.
 9. [ ] Audit records.

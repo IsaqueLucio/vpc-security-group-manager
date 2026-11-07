@@ -625,6 +625,91 @@ curl -X POST "http://localhost:8000/subnets/<subnet-id>/route-table-association"
   -d "{\"route_table_id\":\"$TABLE_ID\"}"
 ```
 
+## Endpoints de Security Groups
+
+Security Groups e regras nesta fase são cadastros com validação; não avaliam
+tráfego stateful. O grupo nasce com status `ACTIVE`. DELETE altera o status
+para `DELETED`, sem apagar fisicamente. Ownership é resolvido pela VPC:
+usuários sem acesso recebem `404`; admins podem acessar recursos de qualquer
+proprietário.
+
+### `POST /vpcs/{vpc_id}/security-groups`
+
+Cria um Security Group ativo:
+
+```json
+{"name": "web", "description": "Camada web"}
+```
+
+### `GET /vpcs/{vpc_id}/security-groups`
+
+Lista os Security Groups ativos da VPC.
+
+### `GET /security-groups/{id}`
+
+Retorna um Security Group acessível.
+
+### `PATCH /security-groups/{id}`
+
+Altera somente `name` e/ou `description`. Envie pelo menos um campo. `name`
+não pode ser nulo. `status` não é aceito.
+
+```json
+{"name": "web-updated", "description": "Descrição atualizada"}
+```
+
+### `DELETE /security-groups/{id}`
+
+Marca o Security Group e suas regras ativas como `DELETED` na mesma transação.
+
+### `POST /security-groups/{id}/rules`
+
+Cria uma regra:
+
+```json
+{
+  "direction": "INBOUND",
+  "protocol": "TCP",
+  "port_range_from": 443,
+  "port_range_to": 443,
+  "cidr_block": "10.0.0.0/8",
+  "description": "HTTPS"
+}
+```
+
+`direction` aceita `INBOUND` ou `OUTBOUND`; `protocol` aceita `TCP`, `UDP`,
+`ICMP` ou `ALL`. TCP/UDP exigem os dois limites de porta, ambos de `0` a
+`65535`, com limite inicial menor ou igual ao final. ICMP/ALL não aceitam
+portas. `cidr_block` deve ser CIDR IPv4 canônico e usa o mesmo validador
+compartilhado por VPC, Subnet e Route. Violações retornam `422`.
+
+### `GET /security-groups/{id}/rules`
+
+Lista regras ativas do Security Group acessível.
+
+### `DELETE /security-group-rules/{id}`
+
+Marca a regra como `DELETED`.
+
+Excluir uma VPC também marca seus Security Groups e suas regras ativas como
+`DELETED` na mesma transação. Referenciar outro Security Group como origem e
+avaliar o tráfego de pacotes não fazem parte desta etapa.
+
+Exemplo manual:
+
+```bash
+GROUP_ID=$(curl -sS -X POST "http://localhost:8000/vpcs/<vpc-id>/security-groups" \
+  -H "Authorization: Bearer <token>" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"web","description":"web tier"}' | jq -r .id)
+curl -X POST "http://localhost:8000/security-groups/$GROUP_ID/rules" \
+  -H "Authorization: Bearer <token>" \
+  -H 'Content-Type: application/json' \
+  -d '{"direction":"INBOUND","protocol":"TCP","port_range_from":443,"port_range_to":443,"cidr_block":"10.0.0.0/8"}'
+curl -H "Authorization: Bearer <token>" \
+  "http://localhost:8000/security-groups/$GROUP_ID/rules"
+```
+
 ## Endpoints de VPC Peering
 
 VPC Peering registra uma solicitação entre duas VPCs; não implementa

@@ -17,6 +17,8 @@ from app.modules.route_table_associations.models import (
     RouteTableAssociation as _RouteTableAssociation,
 )
 from app.modules.vpc_peerings.models import VpcPeering as _VpcPeering
+from app.modules.security_groups.models import SecurityGroup as _SecurityGroup
+from app.modules.security_group_rules.models import SecurityGroupRule as _SecurityGroupRule
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))

@@ -19,6 +19,8 @@ from app.modules.route_table_associations.router import (
     router as route_table_associations_router,
 )
 from app.modules.vpc_peerings.router import router as vpc_peerings_router
+from app.modules.security_groups.router import router as security_groups_router
+from app.modules.security_group_rules.router import router as security_group_rules_router
 from app.modules.users.router import admin_router, router as users_router
 
 
@@ -58,6 +60,8 @@ app.include_router(route_tables_router)
 app.include_router(routes_router)
 app.include_router(route_table_associations_router)
 app.include_router(vpc_peerings_router)
+app.include_router(security_groups_router)
+app.include_router(security_group_rules_router)
 app.include_router(users_router)
 app.include_router(admin_router)
 
